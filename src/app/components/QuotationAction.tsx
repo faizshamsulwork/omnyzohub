@@ -5,12 +5,16 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import Swal from 'sweetalert2'; 
 
 export default function QuotationAction({ quote }: { quote: any }) {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // FUNGSI 1: CONVERT TO INVOICE (Sedia Ada)
+  // 🔴 SAFETY CHECK: Elak crash kalau data belum loading
+  if (!quote) return null;
+
+  // FUNGSI 1: CONVERT TO INVOICE
   const convertToInvoice = async () => {
     if (!window.confirm(`Convert ${quote.quote_no} to an official invoice?`)) return;
     setIsProcessing(true);
@@ -53,7 +57,6 @@ export default function QuotationAction({ quote }: { quote: any }) {
     const loadingToast = toast.loading("Duplicating quotation...");
 
     try {
-      // 1. Jana Nombor Quotation Baharu (Ikut tarikh harini)
       const today = new Date();
       const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
       const prefix = `QU${dateStr}-`;
@@ -66,7 +69,6 @@ export default function QuotationAction({ quote }: { quote: any }) {
         nextQuoteNo = `${prefix}${String(isNaN(lastNum) ? 1 : lastNum + 1).padStart(3, '0')}`;
       }
 
-      // 2. Salin Data Asal tapi guna Nombor & Tarikh Baharu
       const newQuoteData = {
         quote_no: nextQuoteNo,
         client_name: quote.client_name,
@@ -94,18 +96,67 @@ export default function QuotationAction({ quote }: { quote: any }) {
     }
   };
 
-  // FUNGSI 3: DELETE
+  // FUNGSI 3: DELETE DENGAN PASSWORD & AUDIT LOG
   const deleteQuote = async () => {
-    if (!window.confirm("Are you sure? This action is permanent.")) return;
-    setIsProcessing(true);
-    const { error } = await supabase.from("quotations").delete().eq("id", quote.id);
-    if (!error) {
-      toast.success("Quotation deleted successfully.");
-      router.refresh();
-    } else {
-      toast.error("Error deleting quotation.");
+    const { value: password } = await Swal.fire({
+      title: 'Security Check',
+      text: `Enter your login password to permanently delete ${quote.quote_no}`,
+      input: 'password',
+      inputPlaceholder: 'Enter your password',
+      inputAttributes: {
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#374151',
+      confirmButtonText: 'Verify & Delete',
+      background: '#111111',
+      color: '#ffffff'
+      // 🔴 Aku dah buang baris borderRadius kat sini untuk elak error TypeScript
+    });
+
+    if (password) {
+      setIsProcessing(true);
+      const loadingToast = toast.loading("Verifying identity...");
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userEmail = session?.user?.email;
+
+        if (!userEmail) throw new Error("No active session.");
+
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: password
+        });
+
+        if (authError) {
+          toast.error("Security alert: Incorrect password!", { id: loadingToast });
+          setIsProcessing(false);
+          return;
+        }
+
+        await supabase.from("audit_logs").insert([{
+          action: "DELETE_QUOTATION",
+          details: `Deleted ${quote.quote_no} (Client: ${quote.client_name}, Total: RM${quote.total})`,
+          performed_by: userEmail
+        }]);
+
+        const { error: deleteError } = await supabase.from("quotations").delete().eq("id", quote.id);
+        
+        if (deleteError) throw deleteError;
+
+        toast.success("Quotation securely deleted.", { id: loadingToast });
+        router.refresh();
+
+      } catch (err: any) {
+        toast.error(`System Error: ${err.message}`, { id: loadingToast });
+      } finally {
+        setIsProcessing(false);
+      }
     }
-    setIsProcessing(false);
   };
 
   return (
@@ -116,7 +167,6 @@ export default function QuotationAction({ quote }: { quote: any }) {
         </button>
       )}
 
-      {/* BUTANG DUPLICATE BARU */}
       <button onClick={duplicateQuote} disabled={isProcessing} className="p-2 text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-all active:scale-95" title="Duplicate Quotation">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
       </button>

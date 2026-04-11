@@ -3,8 +3,9 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import AuthProvider from "./components/AuthProvider";
-import Sidebar from "./components/Sidebar"; // KITA PANGGIL SIDEBAR DINAMIK
+import Sidebar from "./components/Sidebar";
 import QuickAddMenu from "./components/QuickAddMenu";
+import MobileNav from "./components/MobileNav";
 
 const jakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"],
@@ -13,8 +14,12 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Omnyzo Hub",
-  description: "Financial & Agency Operations Dashboard",
+  description: "Agency Operating System",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -29,6 +34,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <AuthProvider>
           <Toaster position="top-center" expand={false} richColors closeButton theme="dark" />
           
+          {/* Background Aurora */}
           <div className="fixed inset-0 -z-10 h-full w-full overflow-hidden bg-white dark:bg-black transition-colors duration-500 print:hidden">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#ffffff_0%,_#f8fafc_40%,_#e2e8f0_100%)] dark:bg-[radial-gradient(ellipse_at_center,_#000000_0%,_#0a0a0a_40%,_#111111_100%)] opacity-80 dark:opacity-100 transition-colors duration-500"></div>
             <div className="absolute top-0 left-0 w-full h-full opacity-60 dark:opacity-15 blur-[120px] mix-blend-multiply dark:mix-blend-screen pointer-events-none transition-opacity duration-500">
@@ -37,10 +43,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </div>
           </div>
 
-          {/* SIDEBAR SEKARANG BERFIKIR SENDIRI */}
           <Sidebar />
 
-          <main className="flex-1 h-screen print:h-auto overflow-y-auto print:overflow-visible relative">
+          {/* PB-24 penting supaya isi website tak tersorok belakang Mobile Nav bar kat phone */}
+          <main className="flex-1 h-screen print:h-auto overflow-y-auto print:overflow-visible relative pb-24 md:pb-0">
             {children}
           </main>
 
