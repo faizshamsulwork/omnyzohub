@@ -42,7 +42,8 @@ export default function PrintButton({
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        filter: (node) => node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE'
+        // 🔴 THE FIX: Tukar 'filter' kepada 'ignoreElements' supaya TypeScript dan Vercel gembira
+        ignoreElements: (node) => node.tagName === 'SCRIPT' || node.tagName === 'STYLE'
       });
 
       const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
@@ -75,16 +76,13 @@ export default function PrintButton({
          };
       });
 
-      // 🔴 FUNGSI FOOTER KORPORAT (YANG DAH DIBAIKI)
+      // FUNGSI FOOTER KORPORAT
       const drawFooter = (doc: any, w: number, h: number) => {
         doc.setFontSize(7.5); 
         doc.setTextColor(128, 128, 128); 
         const footerText = "Company Registration No: 202503336982 (MA0340342-V). Registered Office: 2003, The Sky Residensi, Jalan 6/91 Taman Shamelin Perkasa, 56100 Kuala Lumpur, Malaysia. Email: hello@omnyzo.com";
         
-        // 🔴 SUNTIKAN MAGIK: splitTextToSize akan potong ayat supaya tak terkeluar margin 15mm kiri & kanan (Total tolak 30mm)
         const lines = doc.splitTextToSize(footerText, w - 30);
-        
-        // Pastikan kedudukan sentiasa tepat 10mm dari bawah walaupun teks berlipat jadi 2 baris
         const lineHeight = 3.5;
         const startY = h - 10 - ((lines.length - 1) * lineHeight);
 
