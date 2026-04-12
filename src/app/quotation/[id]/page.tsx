@@ -1,159 +1,190 @@
+"use client";
+
+import { useEffect, useState, use } from "react";
 import { supabase } from "../../lib/supabase";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import PrintButton from "../../components/PrintButton";
 
-export const revalidate = 0;
+export default function QuotationViewer({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const quoteId = resolvedParams.id;
 
-// Automatik tukar tajuk tab & nama fail download ikut Quote No.
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const { data } = await supabase.from("quotations").select("quote_no").eq("id", resolvedParams.id).single();
-  return { title: data?.quote_no || "Quotation" };
-}
+  const [quote, setQuote] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-export default async function QuotationDocument({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const { data: quote } = await supabase.from("quotations").select("*").eq("id", resolvedParams.id).single();
-  if (!quote) notFound(); 
+  useEffect(() => {
+    const fetchQuote = async () => {
+      if (!quoteId) return;
+      setTimeout(async () => {
+        const { data, error } = await supabase
+          .from("quotations")
+          .select("*")
+          .eq("id", quoteId)
+          .single();
+        if (error) console.error("Error fetching quote:", error);
+        setQuote(data);
+        setIsLoading(false);
+      }, 500);
+    };
+    fetchQuote();
+  }, [quoteId]);
 
-  const { data: client } = await supabase.from("contacts").select("*").eq("name", quote.client_name).single();
-  const dateFormatted = new Date(quote.date).toLocaleDateString('en-MY', { year: 'numeric', month: 'long', day: 'numeric' });
-  const validUntilFormatted = new Date(quote.valid_until).toLocaleDateString('en-MY', { year: 'numeric', month: 'long', day: 'numeric' });
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center font-bold animate-pulse text-gray-500">Loading Official Document...</div>;
+  if (!quote) return <div className="min-h-screen flex items-center justify-center text-red-500 font-bold text-xl">Quotation not found.</div>;
+
+  const formatAddress = (address: string) => {
+    if (!address) return null;
+    const match = address.match(/(.*?),\s*(\d{5}.*)/);
+    if (match) {
+      return (
+        <>
+          <span className="block mb-0.5">{match[1]},</span>
+          <span className="block">{match[2]}</span>
+        </>
+      );
+    }
+    return <span className="block">{address}</span>;
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-black py-10 px-4 md:px-0 transition-colors print:p-0 print:bg-white">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32">
       
-      {/* HEADER KAWALAN (Hanya nampak kat skrin, sembunyi dalam PDF) */}
-      <div className="max-w-[21cm] mx-auto mb-6 flex justify-between items-center print:hidden">
-        <Link href="/quotations" className="text-sm font-medium text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white flex items-center gap-2">
-          &larr; Back to Quotations
+      <div className="max-w-[210mm] mx-auto mb-6 flex justify-between items-center print:hidden">
+        <Link href="/quotations" className="text-gray-500 hover:text-black dark:hover:text-white flex items-center gap-2 font-bold text-sm transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          Back
         </Link>
-        <PrintButton documentName={quote.quote_no} />
+        <PrintButton documentName={`Quotation ${quote.quote_no}`} targetId="quotation-document" filename={`${quote.quote_no}_Omnyzo.pdf`} />
       </div>
 
-      <div className="w-full overflow-x-auto pb-10 print:overflow-visible">
-        <div className="min-w-[21cm] flex justify-center print:block">
-          
-          {/* KERTAS A4 (Layout diperkemas) */}
-          <div className="w-[21cm] min-h-screen print:min-h-0 bg-white p-12 md:p-20 print:p-0 mx-auto shadow-2xl print:shadow-none text-black transition-all">
+      <div className="overflow-x-auto w-full pb-8 scrollbar-hide flex justify-center">
+        <div className="shadow-2xl bg-white">
+          <div id="quotation-document" className="w-[210mm] bg-[#ffffff] relative box-border font-sans flex flex-col h-auto pb-10">
             
-            {/* LOGO & JENIS DOKUMEN */}
-            <div className="flex justify-between items-start mb-16 border-b-2 border-gray-100 pb-10">
-              <div>
-                <img src="/logo.png" alt="Omnyzo Logo" className="h-30 object-contain mb-1" />
-                <p className="text-[15px] text-gray-400 font-bold uppercase tracking-[0.2em]">OMNYZO AGENCY</p>
+            <div className="p-10 md:p-[50px] text-[#000000] flex-grow flex flex-col">
+              
+              {/* HEADER (Dah dicuci) */}
+              <div className="flex justify-between items-start mb-12 border-b-2 border-[#F3F4F6] pb-8 avoid-break">
+                <div className="w-1/2">
+                  <img src="/logo.png" alt="Omnyzo" className="h-16 mb-2 object-contain" />
+                  <h1 className="text-[14px] font-black tracking-widest text-[#000000] uppercase mb-1">Omnyzo Agency</h1>
+                </div>
+                <div className="w-1/2 text-right">
+                  <h2 className="text-[32px] font-black tracking-tighter text-[#000000] mb-4 uppercase">Quotation</h2>
+                  
+                  <table className="w-full text-[11px] text-[#374151] ml-auto">
+                    <tbody>
+                      <tr><td className="py-1 font-bold text-right pr-4 uppercase tracking-wider w-[60%]">Quote No:</td><td className="py-1 font-bold text-[#000000] text-right">{quote.quote_no}</td></tr>
+                      <tr><td className="py-1 font-bold text-right pr-4 uppercase tracking-wider">Date:</td><td className="py-1 text-right">{new Date(quote.date).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' })}</td></tr>
+                      <tr><td className="py-1 font-bold text-right pr-4 uppercase tracking-wider text-[#EF4444]">Valid Until:</td><td className="py-1 text-right font-bold text-[#EF4444]">{new Date(quote.valid_until).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' })}</td></tr>
+                      <tr><td className="py-1 font-bold text-right pr-4 uppercase tracking-wider">Status:</td><td className="py-1 font-bold text-right uppercase tracking-wider text-[#000000]">{quote.status}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="text-right">
-                <h2 className="text-4xl font-light text-gray-200 tracking-[0.3em] uppercase mb-2">Quotation</h2>
-                <p className="text-sm font-black text-black">{quote.quote_no}</p>
-              </div>
-            </div>
 
-            {/* INFO KLIEN & TARIKH */}
-            <div className="grid grid-cols-2 gap-10 mb-16">
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Prepared For:</p>
-                <h3 className="text-xl font-bold text-black mb-2">{quote.client_name}</h3>
-                {client && (
-                  <div className="text-sm text-gray-600 leading-relaxed">
-                    {client.pic_name && <p className="font-bold text-gray-800">Attn: {client.pic_name}</p>}
-                    <p className="max-w-[280px]">{client.address}, {client.postcode} {client.city}, {client.state}</p>
-                    {client.phone && <p className="mt-2 text-blue-600 font-medium">{client.phone}</p>}
-                  </div>
-                )}
+              {/* MAKLUMAT CLIENT */}
+              <div className="mb-10 pt-2 avoid-break">
+                <h3 className="text-[10px] font-black text-[#6B7280] uppercase tracking-widest mb-2 border-l-2 border-black pl-3">Prepared For</h3>
+                <p className="text-[16px] font-bold text-[#000000] leading-snug pl-3">{quote.client_name}</p>
+                <div className="mt-2 space-y-1 pl-3">
+                  {quote.client_pic && <p className="text-[12px] text-[#000000] font-bold">Attn: {quote.client_pic}</p>}
+                  {quote.client_address && <div className="text-[11px] text-[#374151] leading-relaxed max-w-[70%]">{formatAddress(quote.client_address)}</div>}
+                  {quote.client_email && <p className="text-[11px] text-[#374151] pt-1">{quote.client_email}</p>}
+                  {quote.client_phone && <p className="text-[11px] text-[#374151]">{quote.client_phone}</p>}
+                </div>
               </div>
-              <div className="flex flex-col items-end text-right">
-                <div className="mb-6">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date Issued:</p>
-                  <p className="text-sm font-bold text-black">{dateFormatted}</p>
+
+              {/* JADUAL ITEM */}
+              <div className="min-h-[150px]">
+                <table className="w-full mb-8 border-collapse">
+                  <thead>
+                    <tr className="border-y-2 border-[#000000] avoid-break">
+                      <th className="py-3 px-2 text-left text-[10px] font-black uppercase tracking-widest text-[#000000] w-[55%]">Description</th>
+                      <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[5%]">Qty</th>
+                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[15%]">Unit Price</th>
+                      <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[10%]">Tax</th>
+                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[15%]">Total (RM)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quote.items && quote.items.map((item: any, idx: number) => (
+                      item.type === 'title' ? (
+                        <tr key={idx} className="bg-[#F9FAFB] avoid-break">
+                          <td colSpan={5} className="py-4 px-2 text-[11px] font-black text-[#000000] uppercase tracking-wider border-b border-[#E5E7EB] whitespace-pre-wrap leading-relaxed">{item.description}</td>
+                        </tr>
+                      ) : (
+                        <tr key={idx} className="border-b border-[#E5E7EB] avoid-break">
+                          <td className="py-5 px-2 text-[12px] font-medium leading-relaxed whitespace-pre-wrap text-[#000000]">{item.description}</td>
+                          <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">{item.qty}</td>
+                          <td className="py-5 px-2 text-[12px] text-right font-medium text-[#374151] align-top">{Number(item.price).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
+                          <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">{item.taxRate ? `${item.taxRate}%` : '-'}</td>
+                          <td className="py-5 px-2 text-[12px] text-right font-bold text-[#000000] align-top">{Number(item.total).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
+                        </tr>
+                      )
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* PENGIRAAN JUMLAH BESAR */}
+              <div className="flex justify-end mb-12 avoid-break">
+                <div className="w-[70%] md:w-[45%]">
+                  <div className="flex justify-between py-2 border-b border-[#F3F4F6] text-[12px]">
+                    <span className="text-[#374151] font-bold uppercase tracking-wider">Subtotal</span>
+                    <span className="font-bold text-[#000000]">{Number(quote.subtotal).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                  </div>
+                  {Number(quote.discount) > 0 && (
+                    <div className="flex justify-between py-2 border-b border-[#F3F4F6] text-[12px]">
+                      <span className="text-[#374151] font-bold uppercase tracking-wider">Discount</span>
+                      <span className="font-bold text-[#EF4444]">- {Number(quote.discount).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                    </div>
+                  )}
+                  {Number(quote.tax_amount) > 0 && (
+                    <div className="flex justify-between py-2 border-b border-[#F3F4F6] text-[12px]">
+                      <span className="text-[#374151] font-bold uppercase tracking-wider">Tax</span>
+                      <span className="font-bold text-[#000000]">{Number(quote.tax_amount).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center border-y-2 border-[#000000] py-3 mt-1">
+                    <span className="font-black text-[14px] uppercase tracking-widest text-[#000000]">Grand Total</span>
+                    <span className="text-[18px] font-black text-[#000000]">RM {Number(quote.total).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SIGNATURE BLOCK */}
+              <div className="pt-8 border-t border-[#E5E7EB] grid grid-cols-1 md:grid-cols-2 gap-10 items-start avoid-break">
+                <div className="text-[10px] text-[#374151]">
+                  {quote.notes && (
+                    <div className="mb-4">
+                      <h4 className="font-black text-[#000000] uppercase tracking-widest mb-1">Special Notes</h4>
+                      <p className="whitespace-pre-wrap leading-relaxed">{quote.notes}</p>
+                    </div>
+                  )}
+                  {quote.terms && (
+                    <div>
+                      <h4 className="font-black text-[#000000] uppercase tracking-widest mb-1">Terms & Conditions</h4>
+                      <p className="whitespace-pre-wrap leading-relaxed">{quote.terms}</p>
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Valid Until:</p>
-                  <p className="text-sm font-bold text-black">{validUntilFormatted}</p>
+                  <div className="border border-[#000000] p-6 w-full bg-[#FAFAFA]">
+                    <h4 className="text-[12px] font-black mb-1 text-[#000000] uppercase tracking-widest">Client Acceptance</h4>
+                    <p className="text-[10px] text-[#6B7280] mb-8 leading-relaxed">
+                      I/We agree to the terms, conditions, and pricing stated in this quotation and authorize commencement of the project.
+                    </p>
+                    <div className="space-y-6 text-[11px] font-bold text-[#374151]">
+                      <div className="flex items-end"><span className="w-24 uppercase tracking-wider">Signature</span><div className="flex-1 border-b border-[#000000]"></div></div>
+                      <div className="flex items-end"><span className="w-24 uppercase tracking-wider">Name</span><div className="flex-1 border-b border-[#000000]"></div></div>
+                      <div className="flex items-end"><span className="w-24 uppercase tracking-wider">Date</span><div className="flex-1 border-b border-[#000000]"></div></div>
+                    </div>
+                  </div>
                 </div>
               </div>
+              
             </div>
-
-            {/* JADUAL ITEMS */}
-            <div className="mb-12">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-y border-black">
-                    <th className="py-4 px-2 text-[10px] font-bold text-black uppercase tracking-widest">Description</th>
-                    <th className="py-4 px-2 text-[10px] font-bold text-black uppercase tracking-widest text-center w-16">Qty</th>
-                    <th className="py-4 px-2 text-[10px] font-bold text-black uppercase tracking-widest text-right w-28">Unit Price</th>
-                    <th className="py-4 px-2 text-[10px] font-bold text-black uppercase tracking-widest text-center w-16">Tax</th>
-                    <th className="py-4 px-2 text-[10px] font-bold text-black uppercase tracking-widest text-right w-32">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quote.items.map((item: any, idx: number) => (
-                    item.type === 'title' ? (
-                      <tr key={idx} className="bg-gray-50">
-                        <td colSpan={5} className="py-4 px-4 text-xs font-black text-black uppercase tracking-wider border-b border-gray-200">
-                          {item.description}
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr key={idx} className="border-b border-gray-100 align-top">
-                        <td className="py-6 px-4 text-sm font-medium text-gray-800 whitespace-pre-wrap leading-relaxed">
-                          {item.description}
-                        </td>
-                        <td className="py-6 px-2 text-sm text-gray-600 text-center">{item.qty}</td>
-                        <td className="py-6 px-2 text-sm text-gray-600 text-right">{Number(item.price).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-6 px-2 text-sm text-gray-400 text-center">{item.taxRate ? `${item.taxRate}%` : '-'}</td>
-                        <td className="py-6 px-2 text-sm font-bold text-black text-right">RM {Number(item.total).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    )
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* RINGKASAN HARGA (Guna break-inside-avoid) */}
-            <div className="flex justify-end mb-20 break-inside-avoid">
-              <div className="w-full max-w-[320px]">
-                <div className="flex justify-between py-2 text-sm">
-                  <span className="text-gray-400 font-medium">Subtotal</span>
-                  <span className="font-bold text-black">RM {Number(quote.subtotal).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
-                </div>
-                {Number(quote.discount) > 0 && (
-                  <div className="flex justify-between py-2 text-sm">
-                    <span className="text-gray-400 font-medium">Discount</span>
-                    <span className="font-bold text-red-600">-RM {Number(quote.discount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
-                {Number(quote.tax_amount) > 0 && (
-                  <div className="flex justify-between py-2 text-sm">
-                    <span className="text-gray-400 font-medium">Tax / SST</span>
-                    <span className="font-bold text-black">RM {Number(quote.tax_amount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
-                <div className="flex justify-between py-5 border-t-2 border-black mt-2">
-                  <span className="text-lg font-black uppercase tracking-tighter">Total Due</span>
-                  <span className="text-2xl font-black text-black tracking-tight">RM {Number(quote.total).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* TERMA & SYARAT (Guna break-inside-avoid supaya tak terpotong) */}
-            <div className="pt-10 border-t border-gray-100 break-inside-avoid">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                {quote.notes && (
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Special Notes:</p>
-                    <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{quote.notes}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Terms & Conditions:</p>
-                  <p className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed italic">{quote.terms}</p>
-                </div>
-              </div>
-              <p className="text-[9px] text-gray-300 mt-16 text-center italic tracking-widest uppercase">This is a computer-generated document. No signature required.</p>
-            </div>
-
           </div>
         </div>
       </div>

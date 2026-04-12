@@ -11,14 +11,12 @@ export default function QuotationAction({ quote }: { quote: any }) {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 🔴 SAFETY CHECK: Elak crash kalau data belum loading
   if (!quote) return null;
 
-  // FUNGSI 1: CONVERT TO INVOICE
   const convertToInvoice = async () => {
     if (!window.confirm(`Convert ${quote.quote_no} to an official invoice?`)) return;
     setIsProcessing(true);
-    const loadingToast = toast.loading("Generating premium invoice...");
+    const loadingToast = toast.loading("Generating premium itemized invoice...");
 
     try {
       const today = new Date();
@@ -34,15 +32,36 @@ export default function QuotationAction({ quote }: { quote: any }) {
         nextInvNo = `${prefix}${String(isNaN(lastNum) ? 1 : lastNum + 1).padStart(2, '0')}`;
       }
 
+      // Default Credit Term untuk converted invoice = 14 Days
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 14);
+      const formattedDueDate = dueDate.toISOString().split('T')[0];
+
+      // 🔴 MAGIK BERLAKU DI SINI: Angkut semua detail masuk Invois!
       const { error: invError } = await supabase.from("invoices").insert([{
-        invoice_no: nextInvNo, client_name: quote.client_name, description: `Billing for Quotation ${quote.quote_no}`, amount: quote.total, status: "outstanding"
+        invoice_no: nextInvNo, 
+        client_name: quote.client_name, 
+        client_pic: quote.client_pic,
+        client_address: quote.client_address,
+        client_phone: quote.client_phone,
+        client_email: quote.client_email,
+        description: `Converted from Quotation ${quote.quote_no}`, 
+        amount: quote.total, 
+        items: quote.items,          // Pindah Items
+        subtotal: quote.subtotal,    // Pindah Subtotal
+        discount: quote.discount,    // Pindah Discount
+        tax_amount: quote.tax_amount,// Pindah Tax
+        due_date: formattedDueDate,
+        status: "outstanding",
+        terms: "1. Unless specified, Agency Fee is payable within 14 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to billings@omnyzo.com."
       }]);
 
       if (invError) throw invError;
       await supabase.from("quotations").update({ status: "Approved" }).eq("id", quote.id);
       
-      toast.success(`Success! Invoice ${nextInvNo} created.`, { id: loadingToast });
-      router.refresh();
+      toast.success(`Success! Itemized Invoice ${nextInvNo} created.`, { id: loadingToast });
+      // Paksa refresh supaya status bertukar serta merta
+      window.location.reload(); 
     } catch (err: any) {
       toast.error(`Failed to convert: ${err.message}`, { id: loadingToast });
     } finally {
@@ -50,7 +69,6 @@ export default function QuotationAction({ quote }: { quote: any }) {
     }
   };
 
-  // FUNGSI 2: DUPLICATE (REVISION)
   const duplicateQuote = async () => {
     if (!window.confirm(`Duplicate this quotation? A new draft will be created.`)) return;
     setIsProcessing(true);
@@ -72,6 +90,10 @@ export default function QuotationAction({ quote }: { quote: any }) {
       const newQuoteData = {
         quote_no: nextQuoteNo,
         client_name: quote.client_name,
+        client_pic: quote.client_pic,
+        client_address: quote.client_address,
+        client_phone: quote.client_phone,
+        client_email: quote.client_email,
         date: new Date().toISOString().split('T')[0],
         valid_until: quote.valid_until,
         items: quote.items,
@@ -88,7 +110,7 @@ export default function QuotationAction({ quote }: { quote: any }) {
       if (error) throw error;
 
       toast.success(`Duplicated successfully as ${nextQuoteNo}`, { id: loadingToast });
-      router.refresh();
+      window.location.reload();
     } catch (err: any) {
       toast.error(`Error duplicating: ${err.message}`, { id: loadingToast });
     } finally {
@@ -96,17 +118,13 @@ export default function QuotationAction({ quote }: { quote: any }) {
     }
   };
 
-  // FUNGSI 3: DELETE DENGAN PASSWORD & AUDIT LOG
   const deleteQuote = async () => {
     const { value: password } = await Swal.fire({
       title: 'Security Check',
       text: `Enter your login password to permanently delete ${quote.quote_no}`,
       input: 'password',
       inputPlaceholder: 'Enter your password',
-      inputAttributes: {
-        autocapitalize: 'off',
-        autocorrect: 'off'
-      },
+      inputAttributes: { autocapitalize: 'off', autocorrect: 'off' },
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
@@ -114,7 +132,6 @@ export default function QuotationAction({ quote }: { quote: any }) {
       confirmButtonText: 'Verify & Delete',
       background: '#111111',
       color: '#ffffff'
-      // 🔴 Aku dah buang baris borderRadius kat sini untuk elak error TypeScript
     });
 
     if (password) {
@@ -145,11 +162,10 @@ export default function QuotationAction({ quote }: { quote: any }) {
         }]);
 
         const { error: deleteError } = await supabase.from("quotations").delete().eq("id", quote.id);
-        
         if (deleteError) throw deleteError;
 
         toast.success("Quotation securely deleted.", { id: loadingToast });
-        router.refresh();
+        window.location.reload();
 
       } catch (err: any) {
         toast.error(`System Error: ${err.message}`, { id: loadingToast });

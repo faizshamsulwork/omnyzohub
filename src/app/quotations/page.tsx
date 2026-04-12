@@ -26,6 +26,18 @@ export default async function QuotationsPage() {
             <h1 className="text-4xl font-semibold text-gray-900 dark:text-white tracking-tight transition-colors">Quotations</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg transition-colors">Send quotes, track approvals and pipeline.</p>
           </div>
+          {/* Letak ni bersebelahan tajuk "Quotations" kau */}
+<div className="flex justify-between items-center mb-6">
+  <div>
+    <h1 className="text-2xl font-bold">Quotations</h1>
+    <p className="text-sm text-gray-500">Send quotes, track approvals and pipeline.</p>
+  </div>
+  {/* Butang Desktop (Akan hilang di Mobile) */}
+  <Link href="/new-quotation" className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg items-center gap-2 transition-transform active:scale-95">
+    + Create Quotation
+  </Link>
+</div>
+          
          
         </header>
 

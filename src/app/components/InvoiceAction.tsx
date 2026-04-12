@@ -27,7 +27,8 @@ export default function InvoiceAction({ invoice }: { invoice: any }) {
 
     if (!error) {
       toast.success(`Invoice marked as ${newStatus}`, { id: loadingToast });
-      router.refresh();
+      // 🔴 FIX: Paksa skrin update serta merta
+      window.location.reload();
     } else {
       toast.error("Error updating status", { id: loadingToast });
     }
@@ -49,7 +50,6 @@ export default function InvoiceAction({ invoice }: { invoice: any }) {
       confirmButtonText: 'Verify & Delete',
       background: '#111111',
       color: '#ffffff',
-
     });
 
     if (password) {
@@ -87,7 +87,9 @@ export default function InvoiceAction({ invoice }: { invoice: any }) {
         if (deleteError) throw deleteError;
 
         toast.success("Invoice securely deleted.", { id: loadingToast });
-        router.refresh();
+        
+        // 🔴 FIX: Paksa skrin buang invois dari senarai serta-merta lepas delete
+        window.location.reload();
 
       } catch (err: any) {
         toast.error(`System Error: ${err.message}`, { id: loadingToast });

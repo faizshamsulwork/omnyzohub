@@ -2,9 +2,34 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* =========================================
-   PREMIUM AURORA ANIMATION
+   1. FLUIDITY & BASE STYLES (Suntikan Magik)
 ========================================= */
+html {
+  scroll-behavior: smooth;
+}
 
+body {
+  /* Pastikan pertukaran saiz dan dark mode nampak lembut macam mentega */
+  @apply transition-all duration-500 ease-in-out;
+}
+
+/* Memaksa semua komponen untuk tak melompat bila berubah saiz */
+* {
+  @apply transition-colors duration-300;
+}
+
+/* Hilangkan scrollbar hodoh untuk table invoice tapi kekalkan fungsi scroll */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* =========================================
+   2. PREMIUM AURORA ANIMATION (Kod Lama Kau)
+========================================= */
 @keyframes aurora-1 {
   0% { transform: translate(0px, 0px) scale(1); opacity: 0.5; }
   33% { transform: translate(40px, -60px) scale(1.15); opacity: 0.8; }
