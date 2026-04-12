@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import QuickAddMenu from "../components/QuickAddMenu";
+import ExpenseAction from "../components/ExpenseAction";
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -25,52 +25,30 @@ export default function ExpensesPage() {
     fetchExpenses();
   }, []);
 
-  // KIRA-KIRA SUMMARY
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const totalReceipts = expenses.filter(exp => exp.receipt_url).length;
 
-  // FUNGSI 1: EXPORT CSV UNTUK LHDN / AKAUNTAN
   const exportToCSV = () => {
     const toastId = toast.loading("Generating tax ledger...");
-    
-    // Tajuk Kolum
-    const headers = ["Date", "Description", "Category", "Amount (RM)", "Receipt URL"];
-    
-    // Susun Data
+    const headers = ["Date", "Description", "Category", "Amount (RM)", "Status", "Receipt URL"];
     const rows = expenses.map(exp => [
       exp.date,
-      `"${exp.description}"`, // Letak quote supaya koma dalam description tak rosakkan excel
+      `"${exp.description}"`, 
       exp.category,
       exp.amount.toFixed(2),
+      exp.status || "Outstanding",
       exp.receipt_url || "No Receipt"
     ]);
 
-    // Cantumkan
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
-    
-    // Auto-Download
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", `Omnyzo_Expenses_Ledger_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
     toast.success("Ledger exported successfully!", { id: toastId });
-  };
-
-  // FUNGSI 2: DELETE EXPENSE
-  const deleteExpense = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this expense record?")) return;
-    const toastId = toast.loading("Deleting record...");
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
-    if (!error) {
-      toast.success("Record deleted.", { id: toastId });
-      fetchExpenses();
-    } else {
-      toast.error(`Error: ${error.message}`, { id: toastId });
-    }
   };
 
   return (
@@ -82,13 +60,7 @@ export default function ExpensesPage() {
             <h1 className="text-4xl font-semibold tracking-tight">Expenses</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">Track cashflow and manage tax receipts.</p>
           </div>
-          
-          {/* BUTANG EXPORT CSV */}
-          <button 
-            onClick={exportToCSV}
-            disabled={expenses.length === 0}
-            className="bg-green-600 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-green-500/30 hover:bg-green-700 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
-          >
+          <button onClick={exportToCSV} disabled={expenses.length === 0} className="bg-green-600 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-green-500/30 hover:bg-green-700 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             Export Tax Ledger (CSV)
           </button>
@@ -119,33 +91,28 @@ export default function ExpensesPage() {
                   <tr className="border-b border-gray-200 dark:border-gray-800">
                     <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase">Description</th>
-                    <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase">Category</th>
                     <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase">Amount</th>
                     <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase text-center">Receipt</th>
+                    {/* 🔴 KOLUM STATUS BARU */}
+                    <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase text-center">Status</th>
                     <th className="pb-4 px-4 text-xs font-medium text-gray-500 uppercase text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.map((exp) => (
+                  {expenses.map((exp) => {
+                    const isPaid = exp.status === 'Paid';
+                    return (
                     <tr key={exp.id} className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                       <td className="py-4 px-4 text-sm text-gray-500">{new Date(exp.date).toLocaleDateString('en-MY')}</td>
                       <td className="py-4 px-4 text-sm font-bold text-gray-900 dark:text-white max-w-[200px] truncate" title={exp.description}>{exp.description}</td>
-                      <td className="py-4 px-4">
-                        <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-[10px] font-bold uppercase truncate max-w-[150px] inline-block">
-                          {exp.category.replace(' *', '')}
-                        </span>
-                      </td>
                       <td className="py-4 px-4 text-sm font-bold text-red-600 dark:text-red-400">RM {Number(exp.amount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
                       
-                      {/* STATUS RESIT & BUTANG VIEW/DOWNLOAD */}
                       <td className="py-4 px-4 text-center">
                         {exp.receipt_url ? (
                           <div className="flex items-center justify-center gap-2">
-                            {/* Butang View */}
                             <a href={exp.receipt_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg hover:scale-110 transition-transform" title="View Receipt">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             </a>
-                            {/* Butang Download */}
                             <a href={`${exp.receipt_url}?download=`} download className="p-2 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded-lg hover:scale-110 transition-transform" title="Download Receipt">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                             </a>
@@ -155,14 +122,19 @@ export default function ExpensesPage() {
                         )}
                       </td>
 
-                      {/* BUTANG DELETE */}
+                      {/* 🔴 BADGE STATUS */}
+                      <td className="py-4 px-4 text-center">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${isPaid ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800'}`}>
+                          {isPaid ? "Paid" : "Outstanding"}
+                        </span>
+                      </td>
+
+                      {/* 🔴 COMPONENT ACTION (ADA BUTANG TOGGLE & DELETE) */}
                       <td className="py-4 px-4 text-right">
-                        <button onClick={() => deleteExpense(exp.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all active:scale-90" title="Delete Record">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
+                        <ExpenseAction expense={exp} onUpdate={fetchExpenses} />
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -174,8 +146,6 @@ export default function ExpensesPage() {
           )}
         </div>
       </div>
-      
-      {/* Jangan lupa butang magis kita */}
       <QuickAddMenu />
     </div>
   );
