@@ -19,13 +19,15 @@ export default function NewInvoiceWizard() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactTypeFilter, setContactTypeFilter] = useState("Customer");
   
+  // Dapatkan tarikh hari ini dalam format YYYY-MM-DD
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState({
     client_name: "", client_pic: "", client_phone: "", client_email: "", client_address: "",
-    invoice_no: "Generating...", status: "outstanding", credit_term: "14", notes: "", terms: invoiceTemplates.standard
+    invoice_no: "Generating...", invoice_date: todayStr, status: "outstanding", credit_term: "14", notes: "", terms: invoiceTemplates.standard
   });
   
   const [items, setItems] = useState([{ id: Date.now(), type: 'title', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
-  // 🔴 FIX: Tambah sistem Diskaun
   const [discount, setDiscount] = useState(0);
 
   useEffect(() => {
@@ -78,7 +80,6 @@ export default function NewInvoiceWizard() {
 
   const subtotal = items.filter(i => i.type === 'item').reduce((sum, item) => sum + item.total, 0);
   const totalTaxAmount = items.filter(i => i.type === 'item').reduce((sum, item) => sum + (item.total * ((item.taxRate || 0) / 100)), 0);
-  // 🔴 FIX: Kira tolak diskaun
   const grandTotal = (subtotal - discount) + totalTaxAmount;
 
   const nextStep = () => {
@@ -87,7 +88,6 @@ export default function NewInvoiceWizard() {
   };
   const prevStep = () => setStep(prev => prev - 1);
   
-  // 🔴 FIX: Shift+Enter support
   const handleEnterKey = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addItem(); }
   };
@@ -102,12 +102,17 @@ export default function NewInvoiceWizard() {
     setLoading(true);
     const loadingToast = toast.loading("Saving invoice...");
 
-    const today = new Date();
-    const dueDate = new Date(today);
-    dueDate.setDate(today.getDate() + Number(formData.credit_term));
+    // Pengiraan Due Date bergantung pada Invoice Date yang dipilih
+    const baseDate = new Date(formData.invoice_date);
+    const dueDate = new Date(baseDate);
+    dueDate.setDate(baseDate.getDate() + Number(formData.credit_term));
     const formattedDueDate = dueDate.toISOString().split('T')[0];
+    
+    // Set 'created_at' mengikut Invoice Date supaya PDF/Viewer tunjuk tarikh yang betul
+    const createdAtISO = baseDate.toISOString();
 
     const { error } = await supabase.from("invoices").insert([{
+      created_at: createdAtISO, // 🔴 Override tarikh asal kepada tarikh pilihan kau
       invoice_no: formData.invoice_no, 
       client_name: formData.client_name, 
       client_pic: formData.client_pic,
@@ -116,10 +121,10 @@ export default function NewInvoiceWizard() {
       client_email: formData.client_email,
       description: "Creative Services", 
       amount: grandTotal, 
-      items: items,             // 🔴 FIX: Simpan Items dalam database
-      subtotal: subtotal,       // 🔴 FIX: Simpan Subtotal
-      discount: discount,       // 🔴 FIX: Simpan Discount
-      tax_amount: totalTaxAmount,// 🔴 FIX: Simpan Tax
+      items: items,
+      subtotal: subtotal,
+      discount: discount,
+      tax_amount: totalTaxAmount,
       status: formData.status,
       due_date: formattedDueDate,
       notes: formData.notes,      
@@ -165,6 +170,7 @@ export default function NewInvoiceWizard() {
                 <button type="button" onClick={() => setContactTypeFilter("Customer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Customer" ? "bg-white dark:bg-gray-800 shadow-sm text-blue-600 dark:text-blue-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Billed to Customer</button>
                 <button type="button" onClick={() => setContactTypeFilter("Freelancer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Freelancer" ? "bg-white dark:bg-gray-800 shadow-sm text-purple-600 dark:text-purple-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Pay to Freelancer</button>
               </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-500 mb-2">Select {contactTypeFilter} *</label>
@@ -185,13 +191,31 @@ export default function NewInvoiceWizard() {
                     </div>
                   )}
                 </div>
-                <div><label className="block text-sm font-medium text-gray-500 mb-2">Invoice No.</label><input type="text" className="w-full p-4 bg-gray-100 dark:bg-[#151515] border border-transparent rounded-xl cursor-not-allowed font-bold text-gray-900 dark:text-white" value={formData.invoice_no} readOnly /></div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">Invoice No.</label>
+                  <input type="text" className="w-full p-4 bg-gray-100 dark:bg-[#151515] border border-transparent rounded-xl cursor-not-allowed font-bold text-gray-900 dark:text-white" value={formData.invoice_no} readOnly />
+                </div>
+
+                {/* 🔴 RUANGAN BARU: CUSTOM INVOICE DATE */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">Invoice Date *</label>
+                  <input 
+                    type="date" 
+                    required 
+                    className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" 
+                    value={formData.invoice_date} 
+                    onChange={e => setFormData({...formData, invoice_date: e.target.value})} 
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-2">Credit Terms (Due Date) *</label>
                   <select className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.credit_term} onChange={e => setFormData({...formData, credit_term: e.target.value})}>
                     <option value="0">Due on Receipt (Immediate)</option><option value="7">7 Days</option><option value="14">14 Days</option><option value="30">30 Days</option><option value="60">60 Days</option>
                   </select>
                 </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-2">Payment Status *</label>
                   <select className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>

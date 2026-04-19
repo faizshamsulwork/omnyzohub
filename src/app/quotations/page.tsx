@@ -21,24 +21,15 @@ export default async function QuotationsPage() {
     <div className="min-h-screen p-8 md:p-12 selection:bg-blue-200 selection:text-black relative transition-colors duration-500">
       <div className="max-w-6xl mx-auto relative z-10">
         
-        <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        {/* HEADER YANG DAH DIKEMASKINI - CLEAN & MINIMALIST */}
+        <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <h1 className="text-4xl font-semibold text-gray-900 dark:text-white tracking-tight transition-colors">Quotations</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg transition-colors">Send quotes, track approvals and pipeline.</p>
           </div>
-          {/* Letak ni bersebelahan tajuk "Quotations" kau */}
-<div className="flex justify-between items-center mb-6">
-  <div>
-    <h1 className="text-2xl font-bold">Quotations</h1>
-    <p className="text-sm text-gray-500">Send quotes, track approvals and pipeline.</p>
-  </div>
-  {/* Butang Desktop (Akan hilang di Mobile) */}
-  <Link href="/new-quotation" className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg items-center gap-2 transition-transform active:scale-95">
-    + Create Quotation
-  </Link>
-</div>
-          
-         
+          <Link href="/new-quotation" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-bold shadow-lg flex items-center justify-center gap-2 transition-transform hover:scale-105 active:scale-95 w-full md:w-auto">
+            + Create Quotation
+          </Link>
         </header>
 
         {/* SUMMARY CARDS */}

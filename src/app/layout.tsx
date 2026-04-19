@@ -51,6 +51,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </main>
 
           <QuickAddMenu />
+          
+          {/* Navigasi untuk Phone (Menyorok kat Desktop) */}
+          <MobileNav />
 
         </AuthProvider>
       </body>
