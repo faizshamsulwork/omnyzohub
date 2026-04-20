@@ -30,29 +30,64 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${jakarta.variable} font-sans flex min-h-screen bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-100 overflow-hidden print:overflow-visible antialiased transition-colors duration-500`}>
+      <head>
+        <style>{`
+          @keyframes aurora1 {
+            0% { transform: translate(0px, 0px) rotate(0deg) scale(1); }
+            33% { transform: translate(5vw, -5vh) rotate(5deg) scale(1.1); }
+            66% { transform: translate(-5vw, 5vh) rotate(-5deg) scale(0.9); }
+            100% { transform: translate(0px, 0px) rotate(0deg) scale(1); }
+          }
+          @keyframes aurora2 {
+            0% { transform: translate(0px, 0px) rotate(0deg) scale(1); }
+            33% { transform: translate(-5vw, 5vh) rotate(-5deg) scale(1.2); }
+            66% { transform: translate(5vw, -5vh) rotate(5deg) scale(0.8); }
+            100% { transform: translate(0px, 0px) rotate(0deg) scale(1); }
+          }
+          @keyframes aurora3 {
+            0% { transform: translate(0px, 0px) scale(1); }
+            50% { transform: translate(0vw, 10vh) scale(1.3); }
+            100% { transform: translate(0px, 0px) scale(1); }
+          }
+          .animate-aurora-1 { animation: aurora1 25s infinite ease-in-out; }
+          .animate-aurora-2 { animation: aurora2 30s infinite ease-in-out reverse; }
+          .animate-aurora-3 { animation: aurora3 20s infinite ease-in-out; }
+        `}</style>
+      </head>
+      {/* Buang bg-gray-50 di body supaya tak kacau background fixed kat bawah */}
+      <body className={`${jakarta.variable} font-sans flex min-h-screen bg-transparent text-gray-900 dark:text-gray-100 overflow-hidden print:overflow-visible antialiased transition-colors duration-500`}>
         <AuthProvider>
           <Toaster position="top-center" expand={false} richColors closeButton theme="dark" />
           
-          {/* Background Aurora */}
-          <div className="fixed inset-0 -z-10 h-full w-full overflow-hidden bg-white dark:bg-black transition-colors duration-500 print:hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#ffffff_0%,_#f8fafc_40%,_#e2e8f0_100%)] dark:bg-[radial-gradient(ellipse_at_center,_#000000_0%,_#0a0a0a_40%,_#111111_100%)] opacity-80 dark:opacity-100 transition-colors duration-500"></div>
-            <div className="absolute top-0 left-0 w-full h-full opacity-60 dark:opacity-15 blur-[120px] mix-blend-multiply dark:mix-blend-screen pointer-events-none transition-opacity duration-500">
-              <div className="absolute w-[800px] h-[800px] rounded-full bg-blue-300/60 dark:bg-blue-900/40 -top-40 -left-40 transition-colors duration-500"></div>
-              <div className="absolute w-[600px] h-[600px] rounded-full bg-cyan-200/60 dark:bg-zinc-800/40 top-20 right-0 transition-colors duration-500"></div>
+          {/* ================= BACKGROUND UTAMA ================= */}
+          {/* Gunakan bg-[#f1f5f9] (Slate) supaya nampak premium/silver untuk Light Mode */}
+          <div className="fixed inset-0 -z-10 h-full w-full overflow-hidden bg-[#f1f5f9] dark:bg-[#050505] transition-colors duration-500 print:hidden">
+            
+            {/* Efek Lampu Studio dari Atas (Z-0) */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#ffffff_0%,_transparent_80%)] dark:bg-[radial-gradient(ellipse_at_top,_#1a1a1a_0%,_transparent_80%)] transition-colors duration-500 z-0"></div>
+            
+            {/* LAPISAN AURORA (Dinaikkan ke Z-10 supaya tak tertutup) */}
+            <div className="absolute top-0 left-0 w-full h-full opacity-100 dark:opacity-40 blur-[120px] dark:mix-blend-screen pointer-events-none transition-opacity duration-500 z-10">
+              
+              {/* Gelombang 1: Biru Pastel (Light) / Emerald (Dark) */}
+              <div className="absolute w-[60vw] h-[40vh] bg-blue-400/40 dark:bg-emerald-500/60 rounded-full top-[-10%] left-[-10%] transition-colors duration-1000 animate-aurora-1 transform-gpu"></div>
+              
+              {/* Gelombang 2: Indigo Pastel (Light) / Teal (Dark) */}
+              <div className="absolute w-[50vw] h-[50vh] bg-indigo-400/30 dark:bg-teal-500/50 rounded-full top-[20%] right-[-10%] transition-colors duration-1000 animate-aurora-2 transform-gpu"></div>
+              
+              {/* Gelombang 3: Sky Blue (Light) / Green (Dark) */}
+              <div className="absolute w-[60vw] h-[30vh] bg-sky-300/40 dark:bg-green-400/40 rounded-full bottom-[-10%] left-[20%] transition-colors duration-1000 animate-aurora-3 transform-gpu"></div>
+              
             </div>
           </div>
 
           <Sidebar />
 
-          {/* PB-24 penting supaya isi website tak tersorok belakang Mobile Nav bar kat phone */}
           <main className="flex-1 h-screen print:h-auto overflow-y-auto print:overflow-visible relative pb-24 md:pb-0">
             {children}
           </main>
 
           <QuickAddMenu />
-          
-          {/* Navigasi untuk Phone (Menyorok kat Desktop) */}
           <MobileNav />
 
         </AuthProvider>

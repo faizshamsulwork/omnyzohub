@@ -10,6 +10,9 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // PRIVACY MODE STATE
+  const [hideNumbers, setHideNumbers] = useState(false);
+
   // STATE UNTUK TAX PREDICTOR
   const [monthlySalary, setMonthlySalary] = useState<number>(8500);
   const [showTaxModal, setShowTaxModal] = useState(false);
@@ -44,10 +47,12 @@ export default function Dashboard() {
       const savedSalary = localStorage.getItem("omnyzo_monthly_salary");
       const savedReliefs = localStorage.getItem("omnyzo_tax_reliefs_v3");
       const savedAnak = localStorage.getItem("omnyzo_tax_anak");
+      const savedHide = localStorage.getItem("omnyzo_hide_numbers");
       
       if (savedSalary) setMonthlySalary(Number(savedSalary));
       if (savedReliefs) setReliefs(JSON.parse(savedReliefs));
       if (savedAnak) setBilanganAnak(Number(savedAnak));
+      if (savedHide) setHideNumbers(JSON.parse(savedHide));
 
       setIsLoading(false);
     };
@@ -63,6 +68,12 @@ export default function Dashboard() {
       localStorage.setItem("omnyzo_tax_anak", bilanganAnak.toString());
     }
   }, [monthlySalary, reliefs, bilanganAnak, isLoading]);
+
+  const toggleHideNumbers = () => {
+    const newVal = !hideNumbers;
+    setHideNumbers(newVal);
+    localStorage.setItem("omnyzo_hide_numbers", JSON.stringify(newVal));
+  };
 
   const isSuperadmin = userEmail === "faiz@omnyzo.com";
 
@@ -97,15 +108,37 @@ export default function Dashboard() {
 
   const progressPercent = chargeableIncome >= 600000 ? 100 : ((chargeableIncome - currentBracketBase) / (nextBracketThreshold - currentBracketBase)) * 100;
 
+  // Kelas utility untuk effect blur bila hideNumbers aktif
+  const blurClass = hideNumbers ? "blur-[8px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500";
+
   return (
-    <div className="min-h-screen p-8 md:p-12 relative transition-colors duration-500">
+    <div className="min-h-screen p-8 md:p-12 relative transition-colors duration-500 pb-32">
       <div className="max-w-6xl mx-auto relative z-10">
         
-        <header className="mb-10">
-          <h1 className="text-4xl font-semibold tracking-tight">Overview</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">
-            {isSuperadmin ? "Omnyzo's financial health & tax status." : "Welcome to Omnyzo Agency Operating System."}
-          </p>
+        <header className="mb-10 flex justify-between items-start">
+          <div>
+            <div className="flex items-center gap-4">
+              <h1 className="text-4xl font-semibold tracking-tight">Overview</h1>
+              {isSuperadmin && (
+                <button 
+                  onClick={toggleHideNumbers} 
+                  className="p-2.5 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors shadow-sm"
+                  title={hideNumbers ? "Show Financials" : "Hide Financials"}
+                >
+                  {hideNumbers ? (
+                    // Ikon Mata Tertutup (Hide)
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                  ) : (
+                    // Ikon Mata Terbuka (Show)
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  )}
+                </button>
+              )}
+            </div>
+            <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">
+              {isSuperadmin ? "Omnyzo's financial health & tax status." : "Welcome to Omnyzo Agency Operating System."}
+            </p>
+          </div>
         </header>
 
         {isSuperadmin ? (
@@ -113,18 +146,24 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl p-6 rounded-[24px] border border-green-200 dark:border-green-900/30">
                 <h3 className="text-[11px] font-bold text-green-500 uppercase tracking-widest mb-2">Total Revenue</h3>
-                <p className="text-3xl font-black text-green-600 dark:text-green-400">RM {totalRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                <div className={blurClass}>
+                  <p className="text-3xl font-black text-green-600 dark:text-green-400">RM {totalRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                </div>
                 <p className="text-[10px] text-gray-500 mt-1">From {paidInvoices.length} paid invoices</p>
               </div>
               <div className="bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl p-6 rounded-[24px] border border-red-200 dark:border-red-900/30">
                 <h3 className="text-[11px] font-bold text-red-500 uppercase tracking-widest mb-2">Total Expenses</h3>
-                <p className="text-3xl font-black text-red-600 dark:text-red-400">RM {totalExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                <div className={blurClass}>
+                  <p className="text-3xl font-black text-red-600 dark:text-red-400">RM {totalExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                </div>
                 <p className="text-[10px] text-gray-500 mt-1">Company operational costs</p>
               </div>
               <div className={`bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl p-6 rounded-[24px] border ${netProfit >= 0 ? 'border-blue-200 dark:border-blue-900/30' : 'border-orange-200 dark:border-orange-900/30'}`}>
                 <h3 className={`text-[11px] font-bold uppercase tracking-widest mb-2 ${netProfit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit</h3>
-                <p className={`text-3xl font-black ${netProfit >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>RM {netProfit.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
-                <p className="text-[10px] text-gray-500 mt-1">Profit Margin: {profitMargin}%</p>
+                <div className={blurClass}>
+                  <p className={`text-3xl font-black ${netProfit >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>RM {netProfit.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">Profit Margin: <span className={hideNumbers ? "blur-[4px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500"}>{profitMargin}%</span></p>
               </div>
             </div>
 
@@ -137,9 +176,9 @@ export default function Dashboard() {
                     <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     Live Tax Bracket Predictor
                   </h3>
-                  <p className="text-gray-400 text-xs">Total Reliefs: RM {totalReliefs.toLocaleString('en-MY')} | Est. based on Salary + Omnyzo Profit.</p>
+                  <p className="text-gray-400 text-xs">Total Reliefs: <span className={hideNumbers ? "blur-[4px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500"}>RM {totalReliefs.toLocaleString('en-MY')}</span> | Est. based on Salary + Omnyzo Profit.</p>
                 </div>
-                <button onClick={() => setShowTaxModal(true)} className="text-gray-400 hover:text-white transition-colors bg-white/5 p-2 rounded-xl">
+                <button onClick={() => setShowTaxModal(true)} className="text-gray-400 hover:text-white transition-colors bg-white/5 p-2 rounded-xl" title="Tax Relief Settings">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 </button>
               </div>
@@ -153,7 +192,7 @@ export default function Dashboard() {
                     <span className="text-gray-400 text-sm ml-2 font-medium">Current Bracket</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-white font-bold text-lg">RM {chargeableIncome.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                    <p className={`text-white font-bold text-lg ${hideNumbers ? 'blur-[6px] opacity-40 select-none transition-all duration-500' : 'transition-all duration-500'}`}>RM {chargeableIncome.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
                     <p className="text-gray-400 text-[10px] uppercase tracking-widest">Chargeable Income</p>
                   </div>
                 </div>
@@ -166,13 +205,13 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="flex justify-between text-[10px] text-gray-500 font-bold tracking-wider">
-                  <span>RM {currentBracketBase.toLocaleString('en-MY')}</span>
-                  <span>Next Bracket: RM {nextBracketThreshold.toLocaleString('en-MY')}</span>
+                  <span className={hideNumbers ? "blur-[4px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500"}>RM {currentBracketBase.toLocaleString('en-MY')}</span>
+                  <span className={hideNumbers ? "blur-[4px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500"}>Next Bracket: RM {nextBracketThreshold.toLocaleString('en-MY')}</span>
                 </div>
               </div>
             </div>
 
-            {/* MODAL FORM UNTUK TAX RELIEFS DENGAN Z-INDEX PALING TINGGI */}
+            {/* MODAL FORM UNTUK TAX RELIEFS */}
             {showTaxModal && (
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
                 <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[32px] w-full max-w-md border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[80vh] md:max-h-[90vh] overflow-y-auto">
