@@ -18,10 +18,9 @@ export default function NewExpense() {
     category: "Software & Tools *", 
     date: new Date().toISOString().split('T')[0], 
     receipt_url: "",
-    payment_proof_url: "" // LACI BARU UNTUK BUKTI BAYARAN
+    payment_proof_url: ""
   });
 
-  // FUNGSI UPLOAD YANG DAH DI-UPGRADE UNTUK HANDLE DUA JENIS FAIL
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'proof') => {
     if (!e.target.files || e.target.files.length === 0) return;
     
@@ -35,7 +34,6 @@ export default function NewExpense() {
     const toastMessage = type === 'receipt' ? "Uploading Vendor Invoice..." : "Uploading Bank Slip...";
     const toastId = toast.loading(toastMessage);
 
-    // KITA MASIH GUNA BUCKET 'receipts' YANG SAMA
     const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, file);
 
     if (uploadError) {
@@ -69,7 +67,8 @@ export default function NewExpense() {
       category: formData.category, 
       date: formData.date, 
       receipt_url: formData.receipt_url || null,
-      payment_proof_url: formData.payment_proof_url || null
+      payment_proof_url: formData.payment_proof_url || null,
+      status: "Outstanding" // 🔴 TAMBAHAN LOGIK: Tetapkan status default supaya selari dengan SOP
     }]);
 
     if (!error) {

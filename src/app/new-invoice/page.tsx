@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -9,7 +9,8 @@ import { toast } from "sonner";
 const invoiceTemplates = {
   standard: "1. Unless specified, Agency Fee is payable within 30 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to billings@omnyzo.com.",
   immediate: "1. Payment is due immediately upon receipt of this invoice.\n2. Please indicate the invoice number as reference when transferring the funds.\n3. Payment advice should be sent to billings@omnyzo.com.",
-  milestone: "1. This invoice represents a milestone payment (e.g. 50% Deposit) as agreed in the Quotation.\n2. Work will commence upon clearance of this payment.\n3. Please indicate the invoice number as reference when transferring the funds."
+  milestone: "1. This invoice represents a milestone payment (e.g. 50% Deposit) as agreed in the Quotation.\n2. Work will commence upon clearance of this payment.\n3. Please indicate the invoice number as reference when transferring the funds.",
+  voucher: "1. Payment to be transferred to the provided bank account.\n2. Please verify work completion before release of payment."
 };
 
 export default function NewInvoiceWizard() {
@@ -30,29 +31,63 @@ export default function NewInvoiceWizard() {
   const [items, setItems] = useState([{ id: Date.now(), type: 'title', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
   const [discount, setDiscount] = useState(0);
 
+  // 1. Fetch senarai contact sekali sahaja masa load
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchContacts = async () => {
       const { data: contactData } = await supabase.from("contacts").select("*").order("name", { ascending: true });
       if (contactData) {
         setContacts(contactData);
         const filtered = contactData.filter(c => c.contact_type === contactTypeFilter);
         if (filtered.length > 0) handleClientSelect(filtered[0].name, contactData);
       }
-      
-      const today = new Date();
-      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
-      const prefix = `${dateStr}-SV`;
-      const { data: lastInvoice } = await supabase.from("invoices").select("invoice_no").like("invoice_no", `${prefix}%`).order("created_at", { ascending: false }).limit(1);
+    };
+    fetchContacts();
+  }, [contactTypeFilter]); // Re-fetch client list kalau tukar tab Customer/Freelancer
 
-      if (lastInvoice && lastInvoice.length > 0 && lastInvoice[0].invoice_no) {
-        const lastNum = parseInt(lastInvoice[0].invoice_no.split('-SV')[1]);
-        setFormData(p => ({ ...p, invoice_no: `${prefix}${String(isNaN(lastNum) ? 1 : lastNum + 1).padStart(2, '0')}` }));
+  // 2. 🔴 LOGIK BARU: JANA NOMBOR INVOIS BILA-BILA MASA TARIKH BERUBAH
+  useEffect(() => {
+    const generateSequenceNumber = async () => {
+      if (!formData.invoice_date) return;
+      
+      setFormData(prev => ({ ...prev, invoice_no: "Generating..." }));
+      
+      // Tukar "YYYY-MM-DD" kepada "YYYYMMDD"
+      const dateParts = formData.invoice_date.split('-');
+      if (dateParts.length !== 3) return;
+      const dateStr = `${dateParts[0]}${dateParts[1]}${dateParts[2]}`;
+
+      if (contactTypeFilter === "Customer") {
+        const prefix = `${dateStr}-SV`;
+        const { data: lastInvoice } = await supabase.from("invoices").select("invoice_no").like("invoice_no", `${prefix}%`).order("created_at", { ascending: false }).limit(1);
+
+        if (lastInvoice && lastInvoice.length > 0 && lastInvoice[0].invoice_no) {
+          const lastNum = parseInt(lastInvoice[0].invoice_no.split('-SV')[1]);
+          setFormData(p => ({ ...p, invoice_no: `${prefix}${String(isNaN(lastNum) ? 1 : lastNum + 1).padStart(2, '0')}`, terms: invoiceTemplates.standard }));
+        } else {
+          setFormData(p => ({ ...p, invoice_no: `${prefix}01`, terms: invoiceTemplates.standard }));
+        }
       } else {
-        setFormData(p => ({ ...p, invoice_no: `${prefix}01` }));
+        const prefix = `${dateStr}-PV`;
+        const { data: lastPV } = await supabase.from("expenses").select("description").like("description", `[${prefix}%`).order("created_at", { ascending: false });
+
+        let nextNum = 1;
+        if (lastPV && lastPV.length > 0) {
+          const maxPV = lastPV.reduce((max, curr) => {
+            const match = curr.description.match(/-PV(\d+)]/);
+            if (match) {
+              const num = parseInt(match[1]);
+              return num > max ? num : max;
+            }
+            return max;
+          }, 0);
+          nextNum = maxPV + 1;
+        }
+        setFormData(p => ({ ...p, invoice_no: `${prefix}${String(nextNum).padStart(2, '0')}`, terms: invoiceTemplates.voucher }));
       }
     };
-    fetchInitialData();
-  }, [contactTypeFilter]);
+
+    generateSequenceNumber();
+  }, [formData.invoice_date, contactTypeFilter]); // 🔴 Dependency array baru: Dengar perubahan tarikh
 
   const handleClientSelect = (clientName: string, contactList = contacts) => {
     const client = contactList.find(c => c.name === clientName);
@@ -100,44 +135,61 @@ export default function NewInvoiceWizard() {
     if (step !== 3) return;
 
     setLoading(true);
-    const loadingToast = toast.loading("Saving invoice...");
+    const docName = contactTypeFilter === "Customer" ? "invoice" : "payment voucher";
+    const loadingToast = toast.loading(`Saving ${docName}...`);
 
-    // Pengiraan Due Date bergantung pada Invoice Date yang dipilih
     const baseDate = new Date(formData.invoice_date);
     const dueDate = new Date(baseDate);
     dueDate.setDate(baseDate.getDate() + Number(formData.credit_term));
     const formattedDueDate = dueDate.toISOString().split('T')[0];
-    
-    // Set 'created_at' mengikut Invoice Date supaya PDF/Viewer tunjuk tarikh yang betul
     const createdAtISO = baseDate.toISOString();
 
-    const { error } = await supabase.from("invoices").insert([{
-      created_at: createdAtISO, // 🔴 Override tarikh asal kepada tarikh pilihan kau
-      invoice_no: formData.invoice_no, 
-      client_name: formData.client_name, 
-      client_pic: formData.client_pic,
-      client_address: formData.client_address,
-      client_phone: formData.client_phone,
-      client_email: formData.client_email,
-      description: "Creative Services", 
-      amount: grandTotal, 
-      items: items,
-      subtotal: subtotal,
-      discount: discount,
-      tax_amount: totalTaxAmount,
-      status: formData.status,
-      due_date: formattedDueDate,
-      notes: formData.notes,      
-      terms: formData.terms       
-    }]);
+    if (contactTypeFilter === "Customer") {
+      const { error } = await supabase.from("invoices").insert([{
+        created_at: createdAtISO, 
+        invoice_no: formData.invoice_no, 
+        client_name: formData.client_name, 
+        client_pic: formData.client_pic,
+        client_address: formData.client_address,
+        client_phone: formData.client_phone,
+        client_email: formData.client_email,
+        description: "Creative Services", 
+        amount: grandTotal, 
+        items: items,
+        subtotal: subtotal,
+        discount: discount,
+        tax_amount: totalTaxAmount,
+        status: formData.status,
+        due_date: formattedDueDate,
+        notes: formData.notes,      
+        terms: formData.terms       
+      }]);
 
-    if (!error) {
-      toast.success(`Invoice ${formData.invoice_no} saved successfully.`, { id: loadingToast });
-      router.push("/invoices");
-      router.refresh();
+      if (!error) {
+        toast.success(`Invoice ${formData.invoice_no} saved successfully.`, { id: loadingToast });
+        router.push("/invoices");
+        router.refresh();
+      } else {
+        toast.error(`Error saving invoice: ${error.message}`, { id: loadingToast });
+        setLoading(false);
+      }
     } else {
-      toast.error(`Error saving invoice: ${error.message}`, { id: loadingToast });
-      setLoading(false);
+      const descText = `[${formData.invoice_no}] Payment to ${formData.client_name} - ${items.find(i => i.type === 'item')?.description || "Freelance Services"}`;
+      const { error } = await supabase.from("expenses").insert([{
+        description: descText,
+        amount: grandTotal,
+        category: "Professional Fees (Vendors) *",
+        date: formData.invoice_date,
+      }]);
+
+      if (!error) {
+        toast.success(`Payment Voucher ${formData.invoice_no} recorded as Expense!`, { id: loadingToast });
+        router.push("/expenses");
+        router.refresh();
+      } else {
+        toast.error(`Error saving expense: ${error.message}`, { id: loadingToast });
+        setLoading(false);
+      }
     }
   };
 
@@ -149,12 +201,14 @@ export default function NewInvoiceWizard() {
         <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <Link href="/invoices" className="text-sm font-medium text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white mb-2 inline-block transition-colors">&larr; Back to Invoices</Link>
-            <h1 className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter">New Invoice</h1>
+            <h1 className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter">
+              {contactTypeFilter === "Customer" ? "New Invoice" : "Payment Voucher"}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((num) => (
               <div key={num} className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${step === num ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : step > num ? 'bg-gray-800 text-white dark:bg-gray-200 dark:text-black' : 'bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-600'}`}>{step > num ? '✓' : num}</div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${step === num ? (contactTypeFilter === 'Customer' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-purple-600 text-white shadow-lg shadow-purple-500/30') : step > num ? 'bg-gray-800 text-white dark:bg-gray-200 dark:text-black' : 'bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-600'}`}>{step > num ? '✓' : num}</div>
                 {num < 3 && <div className={`w-10 h-1 rounded-full ${step > num ? 'bg-gray-800 dark:bg-gray-200' : 'bg-gray-200 dark:bg-gray-800'}`}></div>}
               </div>
             ))}
@@ -165,7 +219,9 @@ export default function NewInvoiceWizard() {
           
           {step === 1 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">Invoice Details</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">
+                {contactTypeFilter === "Customer" ? "Invoice Details" : "Payment Details"}
+              </h2>
               <div className="bg-gray-50 dark:bg-[#0A0A0A] p-2 rounded-xl border border-gray-200 dark:border-gray-800 flex inline-flex w-full md:w-auto">
                 <button type="button" onClick={() => setContactTypeFilter("Customer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Customer" ? "bg-white dark:bg-gray-800 shadow-sm text-blue-600 dark:text-blue-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Billed to Customer</button>
                 <button type="button" onClick={() => setContactTypeFilter("Freelancer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Freelancer" ? "bg-white dark:bg-gray-800 shadow-sm text-purple-600 dark:text-purple-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Pay to Freelancer</button>
@@ -180,10 +236,12 @@ export default function NewInvoiceWizard() {
                   </select>
                   
                   {formData.client_name && (
-                    <div className="mt-4 p-5 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl animate-in fade-in duration-300">
-                      <h4 className="text-[10px] font-black text-blue-800 dark:text-blue-400 uppercase tracking-widest mb-3">Client Details Auto-Filled</h4>
+                    <div className={`mt-4 p-5 border rounded-2xl animate-in fade-in duration-300 ${contactTypeFilter === 'Customer' ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30' : 'bg-purple-50/50 dark:bg-purple-900/10 border-purple-100 dark:border-purple-900/30'}`}>
+                      <h4 className={`text-[10px] font-black uppercase tracking-widest mb-3 ${contactTypeFilter === 'Customer' ? 'text-blue-800 dark:text-blue-400' : 'text-purple-800 dark:text-purple-400'}`}>
+                        {contactTypeFilter === 'Customer' ? 'Client Details Auto-Filled' : 'Freelancer Details Auto-Filled'}
+                      </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <div><span className="text-gray-500">ATTN:</span> <span className="font-bold text-gray-900 dark:text-white">{formData.client_pic || "-"}</span></div>
+                        <div><span className="text-gray-500">ATTN:</span> <span className="font-bold text-gray-900 dark:text-white">{formData.client_pic || formData.client_name}</span></div>
                         <div><span className="text-gray-500">Email:</span> <span className="font-bold text-gray-900 dark:text-white">{formData.client_email || "-"}</span></div>
                         <div><span className="text-gray-500">Phone:</span> <span className="font-bold text-gray-900 dark:text-white">{formData.client_phone || "-"}</span></div>
                         <div className="md:col-span-2"><span className="text-gray-500">Address:</span> <span className="font-medium text-gray-900 dark:text-white">{formData.client_address || "-"}</span></div>
@@ -193,13 +251,9 @@ export default function NewInvoiceWizard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">Invoice No.</label>
-                  <input type="text" className="w-full p-4 bg-gray-100 dark:bg-[#151515] border border-transparent rounded-xl cursor-not-allowed font-bold text-gray-900 dark:text-white" value={formData.invoice_no} readOnly />
-                </div>
-
-                {/* 🔴 RUANGAN BARU: CUSTOM INVOICE DATE */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">Invoice Date *</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">
+                    {contactTypeFilter === "Customer" ? "Invoice Date *" : "Voucher Date *"}
+                  </label>
                   <input 
                     type="date" 
                     required 
@@ -210,9 +264,22 @@ export default function NewInvoiceWizard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">Credit Terms (Due Date) *</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">
+                    {contactTypeFilter === "Customer" ? "Invoice No." : "Payment Voucher No."}
+                  </label>
+                  <input type="text" className={`w-full p-4 bg-gray-100 dark:bg-[#151515] border border-transparent rounded-xl cursor-not-allowed font-bold text-gray-900 dark:text-white ${formData.invoice_no === "Generating..." ? "animate-pulse" : ""}`} value={formData.invoice_no} readOnly />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">
+                    {contactTypeFilter === "Customer" ? "Credit Terms (Due Date) *" : "Payment Method *"}
+                  </label>
                   <select className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.credit_term} onChange={e => setFormData({...formData, credit_term: e.target.value})}>
-                    <option value="0">Due on Receipt (Immediate)</option><option value="7">7 Days</option><option value="14">14 Days</option><option value="30">30 Days</option><option value="60">60 Days</option>
+                    {contactTypeFilter === "Customer" ? (
+                      <><option value="0">Due on Receipt (Immediate)</option><option value="7">7 Days</option><option value="14">14 Days</option><option value="30">30 Days</option><option value="60">60 Days</option></>
+                    ) : (
+                      <><option value="0">Online Transfer / DuitNow</option><option value="1">Cash</option><option value="2">Cheque</option></>
+                    )}
                   </select>
                 </div>
                 
@@ -287,7 +354,11 @@ export default function NewInvoiceWizard() {
                       if (e.target.value !== "custom") setFormData({ ...formData, terms: invoiceTemplates[e.target.value as keyof typeof invoiceTemplates] });
                     }}
                   >
-                    <option value="custom">Load Template...</option><option value="standard">Standard (30 Days)</option><option value="immediate">Due on Receipt (Immediate)</option><option value="milestone">Milestone Deposit (50%)</option>
+                    <option value="custom">Load Template...</option>
+                    <option value="standard">Standard (30 Days)</option>
+                    <option value="immediate">Due on Receipt (Immediate)</option>
+                    <option value="milestone">Milestone Deposit (50%)</option>
+                    {contactTypeFilter === "Freelancer" && <option value="voucher">Voucher T&C</option>}
                   </select>
                 </div>
                 <textarea rows={5} required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors leading-relaxed" value={formData.terms} onChange={e => setFormData({...formData, terms: e.target.value})}></textarea>
@@ -298,9 +369,11 @@ export default function NewInvoiceWizard() {
           <div className="mt-12 pt-6 border-t border-gray-100 dark:border-gray-800 flex justify-between">
             {step > 1 ? <button type="button" onClick={prevStep} className="px-8 py-3 text-sm font-bold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors">&larr; Back</button> : <div></div>}
             {step < 3 ? (
-              <button type="button" onClick={(e) => { e.preventDefault(); nextStep(); }} className="px-8 py-3 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-full shadow-lg shadow-blue-500/30 transition-all active:scale-95">Continue &rarr;</button>
+              <button type="button" onClick={(e) => { e.preventDefault(); nextStep(); }} className={`px-8 py-3 text-sm font-bold text-white rounded-full shadow-lg transition-all active:scale-95 ${contactTypeFilter === 'Customer' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/30'}`}>Continue &rarr;</button>
             ) : (
-              <button type="submit" disabled={loading} className="px-10 py-3 text-sm font-bold text-white bg-green-600 hover:bg-green-500 rounded-full shadow-lg shadow-green-500/30 transition-all active:scale-95 disabled:opacity-50">{loading ? "Generating..." : "Generate Invoice"}</button>
+              <button type="submit" disabled={loading || formData.invoice_no === "Generating..."} className={`px-10 py-3 text-sm font-bold text-white rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${contactTypeFilter === 'Customer' ? 'bg-green-600 hover:bg-green-500 shadow-green-500/30' : 'bg-purple-600 hover:bg-purple-500 shadow-purple-500/30'}`}>
+                {loading ? "Processing..." : `Generate ${contactTypeFilter === "Customer" ? "Invoice" : "Voucher"}`}
+              </button>
             )}
           </div>
         </form>

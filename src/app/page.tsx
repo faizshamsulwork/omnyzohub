@@ -17,13 +17,19 @@ export default function Dashboard() {
   const [monthlySalary, setMonthlySalary] = useState<number>(8500);
   const [showTaxModal, setShowTaxModal] = useState(false);
 
-  // PELEPASAN TERPERINCI (LHDN Defaults)
+  // PELEPASAN TERPERINCI (LHDN Defaults - Dikemaskini dengan kategori penuh)
   const [reliefs, setReliefs] = useState({
     individu: 9000,
+    pasangan: 0,       // Pelepasan Suami/Isteri (Max RM 4,000)
+    taska: 0,          // Yuran Taska/Tadika (Max RM 3,000)
+    ibu_bapa: 0,       // Perubatan/Penjagaan Ibu Bapa (Max RM 8,000)
+    gaya_hidup: 2500,
+    sukan: 0,          // Gaya Hidup - Sukan (Max RM 1,000)
+    perubatan: 0,
     kwsp: 4000,
     insurans_nyawa: 3000,
-    gaya_hidup: 2500,
-    perubatan: 0
+    sspn: 0,           // Skim Simpanan Pendidikan Nasional (Max RM 8,000)
+    prs: 0             // Skim Persaraan Swasta (Max RM 3,000)
   });
   
   // STATE KHAS UNTUK ANAK (Multiplier)
@@ -45,7 +51,7 @@ export default function Dashboard() {
       if (expRes.data) setExpenses(expRes.data);
 
       const savedSalary = localStorage.getItem("omnyzo_monthly_salary");
-      const savedReliefs = localStorage.getItem("omnyzo_tax_reliefs_v3");
+      const savedReliefs = localStorage.getItem("omnyzo_tax_reliefs_v4"); // Tukar ke v4 sebab struktur data berubah
       const savedAnak = localStorage.getItem("omnyzo_tax_anak");
       const savedHide = localStorage.getItem("omnyzo_hide_numbers");
       
@@ -64,7 +70,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem("omnyzo_monthly_salary", monthlySalary.toString());
-      localStorage.setItem("omnyzo_tax_reliefs_v3", JSON.stringify(reliefs));
+      localStorage.setItem("omnyzo_tax_reliefs_v4", JSON.stringify(reliefs));
       localStorage.setItem("omnyzo_tax_anak", bilanganAnak.toString());
     }
   }, [monthlySalary, reliefs, bilanganAnak, isLoading]);
@@ -108,7 +114,6 @@ export default function Dashboard() {
 
   const progressPercent = chargeableIncome >= 600000 ? 100 : ((chargeableIncome - currentBracketBase) / (nextBracketThreshold - currentBracketBase)) * 100;
 
-  // Kelas utility untuk effect blur bila hideNumbers aktif
   const blurClass = hideNumbers ? "blur-[8px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500";
 
   return (
@@ -126,10 +131,8 @@ export default function Dashboard() {
                   title={hideNumbers ? "Show Financials" : "Hide Financials"}
                 >
                   {hideNumbers ? (
-                    // Ikon Mata Tertutup (Hide)
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
                   ) : (
-                    // Ikon Mata Terbuka (Show)
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                   )}
                 </button>
@@ -214,70 +217,131 @@ export default function Dashboard() {
             {/* MODAL FORM UNTUK TAX RELIEFS */}
             {showTaxModal && (
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
-                <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[32px] w-full max-w-md border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[80vh] md:max-h-[90vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6">
+                <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[32px] w-full max-w-lg border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[85vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-6 sticky top-0 bg-white dark:bg-[#111] pb-4 border-b border-gray-200 dark:border-gray-800 z-10">
                     <h2 className="text-xl font-bold dark:text-white">Tax Reliefs Form</h2>
-                    <button onClick={() => setShowTaxModal(false)} className="text-gray-500 hover:text-black dark:hover:text-white">✕</button>
+                    <button onClick={() => setShowTaxModal(false)} className="text-gray-500 hover:text-black dark:hover:text-white p-2">✕</button>
                   </div>
                   
-                  <div className="space-y-4">
-                    <div className="pb-4 border-b border-gray-200 dark:border-gray-800">
+                  <div className="space-y-8">
+                    {/* ASAS PENDAPATAN */}
+                    <div>
                       <label className="block text-[10px] font-bold text-blue-500 uppercase mb-1">Monthly Salary (Adtech)</label>
                       <p className="text-[9px] text-gray-500 mb-2">Gaji kasar bulanan dari penggajian rasmi.</p>
-                      <input type="number" value={monthlySalary} onChange={(e) => setMonthlySalary(Number(e.target.value))} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                      <input type="number" value={monthlySalary} onChange={(e) => setMonthlySalary(Number(e.target.value))} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-blue-500 transition-colors" />
                     </div>
 
-                    <div className="pt-2">
-                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-4">Claimable Reliefs (Yearly)</p>
+                    {/* SEKSYEN 1: INDIVIDU & KELUARGA */}
+                    <div className="bg-gray-50 dark:bg-white/5 p-5 rounded-2xl border border-gray-100 dark:border-gray-800/50">
+                      <h3 className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-500"></span> Keluarga & Tanggungan
+                      </h3>
                       
-                      <div className="mb-4">
-                        <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Individu & Tanggungan</label>
-                        <p className="text-[9px] text-gray-500 mb-2">Pelepasan automatik. (Maksimum RM 9,000)</p>
-                        <input type="number" value={reliefs.individu} onChange={(e) => setReliefs({...reliefs, individu: Number(e.target.value)})} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-yellow-400" />
-                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Individu & Tanggungan</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Pelepasan automatik diri sendiri. (Max RM 9,000)</p>
+                          <input type="number" value={reliefs.individu} onChange={(e) => setReliefs({...reliefs, individu: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Pelepasan Suami / Isteri</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Jika pasangan tiada punca pendapatan. (Max RM 4,000)</p>
+                          <input type="number" value={reliefs.pasangan} onChange={(e) => setReliefs({...reliefs, pasangan: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                        </div>
 
-                      <div className="mb-4">
-                        <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">KWSP (EPF)</label>
-                        <p className="text-[9px] text-gray-500 mb-2">Caruman wajib/sukarela. (Maksimum RM 4,000)</p>
-                        <input type="number" value={reliefs.kwsp} onChange={(e) => setReliefs({...reliefs, kwsp: Number(e.target.value)})} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-yellow-400" />
-                      </div>
+                        <div className="flex items-center justify-between bg-white dark:bg-black p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Bilangan Anak (Bawah 18)</label>
+                            <p className="text-[9px] text-gray-500">RM 2,000 untuk setiap anak.</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <input type="number" value={bilanganAnak} onChange={(e) => setBilanganAnak(Number(e.target.value))} className="w-16 bg-gray-100 dark:bg-gray-900 border border-transparent rounded-lg px-2 py-1 text-center dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          </div>
+                        </div>
 
-                      <div className="mb-4">
-                        <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Insurans Nyawa</label>
-                        <p className="text-[9px] text-gray-500 mb-2">Premium insurans nyawa. (Maksimum RM 3,000)</p>
-                        <input type="number" value={reliefs.insurans_nyawa} onChange={(e) => setReliefs({...reliefs, insurans_nyawa: Number(e.target.value)})} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-yellow-400" />
-                      </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Yuran Taska / Tadika Berdaftar</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Perbelanjaan asuhan anak. (Max RM 3,000)</p>
+                          <input type="number" value={reliefs.taska} onChange={(e) => setReliefs({...reliefs, taska: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
+                        </div>
 
-                      <div className="mb-4">
-                        <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Gaya Hidup (Lifestyle)</label>
-                        <p className="text-[9px] text-gray-500 mb-2">Buku, PC, sukan, internet. (Maksimum RM 2,500)</p>
-                        <input type="number" value={reliefs.gaya_hidup} onChange={(e) => setReliefs({...reliefs, gaya_hidup: Number(e.target.value)})} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-yellow-400" />
-                      </div>
-
-                      <div className="mb-4">
-                        <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Perubatan</label>
-                        <p className="text-[9px] text-gray-500 mb-2">Penyakit serius & check-up. (Maksimum RM 10,000)</p>
-                        <input type="number" value={reliefs.perubatan} onChange={(e) => setReliefs({...reliefs, perubatan: Number(e.target.value)})} className="w-full bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-yellow-400" />
-                      </div>
-
-                      <div className="mb-4">
-                        <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Bilangan Anak (Bawah 18 Tahun)</label>
-                        <p className="text-[9px] text-gray-500 mb-2">Pelepasan RM 2,000 untuk setiap anak.</p>
-                        <div className="flex items-center gap-4">
-                          <input type="number" value={bilanganAnak} onChange={(e) => setBilanganAnak(Number(e.target.value))} className="w-24 bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-3 dark:text-white text-sm focus:outline-none focus:border-yellow-400" />
-                          <span className="text-sm font-bold text-gray-500">= RM {(bilanganAnak * 2000).toLocaleString('en-MY')}</span>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Perubatan & Penjagaan Ibu Bapa</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Rawatan perubatan, keperluan khas. (Max RM 8,000)</p>
+                          <input type="number" value={reliefs.ibu_bapa} onChange={(e) => setReliefs({...reliefs, ibu_bapa: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-blue-500" />
                         </div>
                       </div>
-
                     </div>
+
+                    {/* SEKSYEN 2: GAYA HIDUP & PERUBATAN */}
+                    <div className="bg-gray-50 dark:bg-white/5 p-5 rounded-2xl border border-gray-100 dark:border-gray-800/50">
+                      <h3 className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-purple-500"></span> Gaya Hidup & Kesihatan
+                      </h3>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Gaya Hidup Umum</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Buku, PC, internet, telefon. (Max RM 2,500)</p>
+                          <input type="number" value={reliefs.gaya_hidup} onChange={(e) => setReliefs({...reliefs, gaya_hidup: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-purple-500" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Gaya Hidup (Khas Sukan)</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Alatan sukan, yuran keahlian gym. (Max RM 1,000)</p>
+                          <input type="number" value={reliefs.sukan} onChange={(e) => setReliefs({...reliefs, sukan: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-purple-500" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Perubatan Diri & Keluarga</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Penyakit serius, vaksin, check-up. (Max RM 10,000)</p>
+                          <input type="number" value={reliefs.perubatan} onChange={(e) => setReliefs({...reliefs, perubatan: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-purple-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SEKSYEN 3: SIMPANAN & PELABURAN */}
+                    <div className="bg-gray-50 dark:bg-white/5 p-5 rounded-2xl border border-gray-100 dark:border-gray-800/50">
+                      <h3 className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span> Simpanan & Pelaburan
+                      </h3>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">KWSP (EPF)</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Caruman wajib / sukarela. (Max RM 4,000)</p>
+                          <input type="number" value={reliefs.kwsp} onChange={(e) => setReliefs({...reliefs, kwsp: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-green-500" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Insurans Nyawa</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Premium insurans nyawa. (Max RM 3,000)</p>
+                          <input type="number" value={reliefs.insurans_nyawa} onChange={(e) => setReliefs({...reliefs, insurans_nyawa: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-green-500" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">SSPN (Pendidikan Anak)</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Tabungan bersih SSPN tahunan. (Max RM 8,000)</p>
+                          <input type="number" value={reliefs.sspn} onChange={(e) => setReliefs({...reliefs, sspn: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-green-500" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase mb-1">Skim Persaraan Swasta (PRS)</label>
+                          <p className="text-[9px] text-gray-500 mb-1">Caruman PRS atau anuiti tertunda. (Max RM 3,000)</p>
+                          <input type="number" value={reliefs.prs} onChange={(e) => setReliefs({...reliefs, prs: Number(e.target.value)})} className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 dark:text-white text-sm focus:outline-none focus:border-green-500" />
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
 
-                  <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                  <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center sticky bottom-0 bg-white dark:bg-[#111]">
                     <div>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest">Total Reliefs</p>
-                      <p className="text-lg font-bold text-green-600 dark:text-green-400">RM {totalReliefs.toLocaleString('en-MY')}</p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Total Claimable</p>
+                      <p className="text-xl font-black text-green-600 dark:text-green-400">RM {totalReliefs.toLocaleString('en-MY')}</p>
                     </div>
-                    <button onClick={() => setShowTaxModal(false)} className="bg-black dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl font-bold text-sm hover:scale-105 active:scale-95 transition-all">
+                    <button onClick={() => setShowTaxModal(false)} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-500/30">
                       Save & Close
                     </button>
                   </div>
