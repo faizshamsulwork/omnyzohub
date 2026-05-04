@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,6 +12,9 @@ export default function NewExpense() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
   
+  // STATE BARU: Simpan senarai freelancer dari database
+  const [freelancers, setFreelancers] = useState<any[]>([]);
+  
   const [formData, setFormData] = useState({
     description: "", 
     amount: "", 
@@ -20,6 +23,20 @@ export default function NewExpense() {
     receipt_url: "",
     payment_proof_url: ""
   });
+
+  // 🔴 LOGIK BARU: Tarik senarai Freelancer masa page loading
+  useEffect(() => {
+    const fetchFreelancers = async () => {
+      const { data } = await supabase
+        .from("contacts")
+        .select("*")
+        .eq("contact_type", "Freelancer")
+        .order("name", { ascending: true });
+      
+      if (data) setFreelancers(data);
+    };
+    fetchFreelancers();
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'receipt' | 'proof') => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -68,7 +85,7 @@ export default function NewExpense() {
       date: formData.date, 
       receipt_url: formData.receipt_url || null,
       payment_proof_url: formData.payment_proof_url || null,
-      status: "Outstanding" // 🔴 TAMBAHAN LOGIK: Tetapkan status default supaya selari dengan SOP
+      status: "Outstanding" 
     }]);
 
     if (!error) {
@@ -120,7 +137,7 @@ export default function NewExpense() {
               <input 
                 type="date" 
                 required 
-                className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white transition-colors" 
+                className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white transition-colors dark:[color-scheme:dark]" 
                 value={formData.date} 
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })} 
               />
@@ -142,12 +159,40 @@ export default function NewExpense() {
               <option value="Office Supplies & Equipment *">Office Supplies & Equipment *</option>
               <option value="Travel & Transportation *">Travel & Transportation *</option>
               <option value="Rental & Utilities *">Rental & Utilities *</option>
-              <option value="Owner Drawings (Non-Taxable)">Owner Drawings (Personal)</option>
+              <option value="Owner Drawings (Personal)">Owner Drawings (Personal)</option>
               <option value="Other">Other Expenses</option>
             </select>
             <p className="text-[11px] text-gray-400 mt-2 font-medium">
               <span className="text-blue-500 font-bold">*</span> Indicates expenses generally tax-deductible under LHDN guidelines.
             </p>
+
+            {/* 🔴 LOGIK BARU: DROPDOWN EXTRA UNTUK FREELANCER MUNCUL BILA DIPILIH */}
+            {formData.category === "Professional Fees (Vendors) *" && (
+              <div className="mt-4 p-5 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800/50 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="block text-xs font-bold text-purple-700 dark:text-purple-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  Select Vendor / Freelancer
+                </label>
+                <select 
+                  className="w-full p-3 bg-white dark:bg-[#151515] border border-purple-200 dark:border-purple-800 rounded-lg focus:ring-2 focus:ring-purple-500 text-gray-900 dark:text-white transition-colors text-sm font-medium"
+                  onChange={(e) => {
+                    const selectedName = e.target.value;
+                    if (selectedName) {
+                      const currentDesc = formData.description.trim();
+                      // Auto-masuk nama: Kalau description dah ada teks, dia akan letak " - Nama". Kalau kosong, dia isi nama je.
+                      const newDesc = currentDesc === "" ? selectedName : `${currentDesc} - ${selectedName}`;
+                      setFormData({ ...formData, description: newDesc });
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>-- Choose from Directory --</option>
+                  {freelancers.map(f => (
+                    <option key={f.id} value={f.name}>{f.name} {f.service_role ? `(${f.service_role})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           
           <div className="pt-6 border-t border-gray-200 dark:border-gray-800">

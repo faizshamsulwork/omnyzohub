@@ -18,7 +18,6 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
     const fetchVoucher = async () => {
       if (!voucherId) return;
       
-      // 1. Tarik data dari laci expenses
       const { data: expData, error: expError } = await supabase
         .from("expenses")
         .select("*")
@@ -30,28 +29,67 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
       if (expData) {
         setExpense(expData);
         
-        // 2. Ekstrak data dari description
-        let vNo = expData.id.substring(0,8).toUpperCase(); // Default fallback
-        let fName = "Vendor / Freelancer";
-        let desc = expData.description;
+        let vNo = expData.id.substring(0,8).toUpperCase(); 
+        const pvMatch = expData.description.match(/^\[(.*?)\]\s*(.*)$/);
+        let rawText = expData.description;
 
-        const match = expData.description.match(/^\[(.*?)\] Payment to (.*?) - (.*)$/);
-        if (match) {
-          vNo = match[1];
-          fName = match[2];
-          desc = match[3];
+        if (pvMatch) {
+          vNo = pvMatch[1].trim();
+          rawText = pvMatch[2].trim();
         }
 
-        setParsedData({ voucherNo: vNo, name: fName, itemDesc: desc });
+        rawText = rawText.replace(/^Payment to\s*/i, '');
+        const textParts = rawText.split(' - ').map(p => p.trim());
+        
+        let finalName = "Vendor / Freelancer";
+        let finalDesc = rawText;
 
-        // 3. Tarik bank details freelancer
-        const { data: contactData } = await supabase
-          .from("contacts")
-          .select("*")
-          .eq("name", fName)
-          .single();
-          
-        if (contactData) setFreelancer(contactData);
+        const { data: contacts } = await supabase.from("contacts").select("*");
+        
+        if (contacts && contacts.length > 0) {
+          let foundContact = null;
+          let matchedPart = "";
+
+          for (const part of textParts) {
+            const cleanPart = part.replace(/\(.*?\)/g, '').trim().toLowerCase();
+            if (cleanPart.length < 3) continue;
+
+            const match = contacts.find((c: any) => {
+              const cName = c.name.toLowerCase();
+              if (cName.includes(cleanPart) || cleanPart.includes(cName)) return true;
+              
+              const nameWords = cName.split(' ').filter((w: string) => w.length > 3 && !['binti','mohd','syed','bin'].includes(w));
+              return nameWords.some((w: string) => cleanPart.includes(w));
+            });
+
+            if (match) {
+              foundContact = match;
+              matchedPart = part;
+              break;
+            }
+          }
+
+          if (foundContact) {
+            setFreelancer(foundContact);
+            finalName = foundContact.name; 
+            
+            const remainingParts = textParts.filter(p => p !== matchedPart);
+            
+            // 🔴 LOGIK BARU: Jika tiada baki ayat (user cuma masukkan nama), guna Role
+            if (remainingParts.length > 0) {
+              finalDesc = remainingParts.join(' - ');
+            } else {
+              finalDesc = foundContact.service_role 
+                ? `${foundContact.service_role} Fee / Services` 
+                : "Professional Services Rendered";
+            }
+          } else {
+             finalName = textParts.length > 1 ? textParts[0] : rawText.split(' ')[0];
+             finalDesc = textParts.length > 1 ? textParts.slice(1).join(' - ') : rawText;
+          }
+        }
+
+        setParsedData({ voucherNo: vNo, name: finalName, itemDesc: finalDesc });
       }
       
       setIsLoading(false);
@@ -187,20 +225,15 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
                 
-                {/* 🔴 SIGNATURE BLOCK DENGAN AUTOMASI GAMBAR */}
+                {/* SIGNATURE BLOCK */}
                 <div className="flex justify-end pt-4 mt-6">
                   <div className="w-56 text-center relative">
-                    
-                    {/* Gambar diturunkan secara paksa guna 'translate-y-8' supaya dakwat bertindih garisan */}
                     <img 
                       src="/signature.png" 
                       alt="Authorized Signature" 
                       className="absolute z-10 bottom-0 left-1/2 transform -translate-x-1/2 translate-y-12 h-[200px] w-auto object-contain mix-blend-multiply pointer-events-none" 
                     />
-                    
-                    {/* Ruang Kosong & Garisan */}
                     <div className="border-b border-black mb-2 h-16 relative z-0"></div>
-                    
                     <p className="text-[10px] font-bold text-[#000000] uppercase tracking-widest relative z-10">Authorized By</p>
                     <p className="text-[9px] text-[#374151] relative z-10">Faiz Shamsul - Omnyzo Agency</p>
                   </div>

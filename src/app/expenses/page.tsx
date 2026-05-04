@@ -11,7 +11,6 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // STATE BARU: Untuk kesan butang mana yang tengah loading (receipt atau proof)
   const [uploadingState, setUploadingState] = useState<{ id: string, type: 'receipt' | 'proof' } | null>(null);
 
   const fetchExpenses = async () => {
@@ -29,13 +28,10 @@ export default function ExpensesPage() {
     fetchExpenses();
   }, []);
 
-  // 🔴 LOGIK BARU: Asingkan yang dah "Paid" untuk pengiraan kotak merah
   const paidExpenses = expenses.filter(exp => exp.status === 'Paid');
   const totalExpenses = paidExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-  
   const totalReceipts = expenses.filter(exp => exp.receipt_url || exp.payment_proof_url).length;
 
-  // FUNGSI UPLOAD DI-UPGRADE: Boleh pilih nak upload Invois atau Resit Bank
   const handleQuickUpload = async (e: React.ChangeEvent<HTMLInputElement>, id: string, type: 'receipt' | 'proof') => {
     if (!e.target.files || e.target.files.length === 0) return;
     
@@ -70,6 +66,53 @@ export default function ExpensesPage() {
       toast.error(`Database error: ${updateError.message}`, { id: toastId });
     }
     setUploadingState(null);
+  };
+
+  // 🔴 LOGIK BARU: Auto-Generate PV untuk rekod sedia ada
+  const handleGeneratePV = async (exp: any) => {
+    const toastId = toast.loading("Generating Payment Voucher...");
+
+    try {
+      const dateParts = exp.date.split('-');
+      if (dateParts.length !== 3) throw new Error("Invalid date format");
+      const dateStr = `${dateParts[0]}${dateParts[1]}${dateParts[2]}`;
+      const prefix = `${dateStr}-PV`;
+
+      const { data: lastPV } = await supabase
+        .from("expenses")
+        .select("description")
+        .like("description", `[%${prefix}%] %`)
+        .order("created_at", { ascending: false });
+
+      let nextNum = 1;
+      if (lastPV && lastPV.length > 0) {
+        const maxPV = lastPV.reduce((max: number, curr: any) => {
+          const match = curr.description.match(/-PV(\d+)]/);
+          if (match) {
+            const num = parseInt(match[1]);
+            return num > max ? num : max;
+          }
+          return max;
+        }, 0);
+        nextNum = maxPV + 1;
+      }
+
+      const newPvNo = `${prefix}${String(nextNum).padStart(2, '0')}`;
+      const newDescription = `[${newPvNo}] ${exp.description}`;
+
+      const { error: updateError } = await supabase
+        .from('expenses')
+        .update({ description: newDescription })
+        .eq('id', exp.id);
+
+      if (updateError) throw updateError;
+
+      toast.success(`Payment Voucher ${newPvNo} generated!`, { id: toastId });
+      fetchExpenses(); 
+
+    } catch (error: any) {
+      toast.error(`Error generating PV: ${error.message}`, { id: toastId });
+    }
   };
 
   const exportToCSV = () => {
@@ -144,6 +187,8 @@ export default function ExpensesPage() {
                   {expenses.map((exp) => {
                     const isPaid = exp.status === 'Paid';
                     const isSystemPV = exp.description?.includes('-PV');
+                    // 🔴 Pengecaman kategori ambilan
+                    const isDrawings = exp.category?.includes('Owner Drawings') || exp.description?.toLowerCase().includes('ambilan');
 
                     return (
                     <tr key={exp.id} className="border-b border-gray-100 dark:border-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
@@ -164,7 +209,6 @@ export default function ExpensesPage() {
                       <td className="py-4 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           
-                          {/* BUTANG KIRI: VENDOR INVOICE */}
                           {exp.receipt_url ? (
                             <a href={exp.receipt_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg hover:scale-110 transition-transform" title="View Vendor Invoice">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -186,7 +230,6 @@ export default function ExpensesPage() {
                             </div>
                           )}
 
-                          {/* BUTANG KANAN: PAYMENT PROOF */}
                           {exp.payment_proof_url ? (
                             <a href={exp.payment_proof_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 rounded-lg hover:scale-110 transition-transform" title="View Payment Proof">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
@@ -220,10 +263,15 @@ export default function ExpensesPage() {
                       <td className="py-4 px-4 text-right">
                         <div className="flex items-center justify-end gap-3">
                           
-                          {isSystemPV && (
+                          {/* 🔴 BUTANG LOGIK: Tunjuk PV icon kalau dah wujud, tunjuk butang Generate kalau belum wujud (kecuali ambilan) */}
+                          {isSystemPV ? (
                             <Link href={`/vouchers/${exp.id}`} className="p-1.5 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400 rounded-lg hover:scale-110 hover:bg-purple-200 dark:hover:bg-purple-800/60 transition-all shadow-sm" title="View Generated Voucher">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             </Link>
+                          ) : !isDrawings && (
+                            <button onClick={() => handleGeneratePV(exp)} className="p-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 rounded-lg hover:scale-110 hover:bg-blue-200 dark:hover:bg-blue-800/60 transition-all shadow-sm flex items-center gap-1" title="Generate Payment Voucher">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            </button>
                           )}
                           
                           <ExpenseAction expense={exp} onUpdate={fetchExpenses} />
