@@ -6,9 +6,77 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 
+// 🔴 LOGIK BARU: Pangkalan Data Mini untuk Harga Omnyzo Agency
+const servicesCatalog = [
+  {
+    category: "Strategy, Mgmt & Reporting",
+    items: [
+      { name: "Account Management (High)", price: 4500, desc: "Account Management (Liaison & Project)\nHigh: 20+ deliverables/month" },
+      { name: "Account Management (Med)", price: 2500, desc: "Account Management (Liaison & Project)\nMed: 11-20 deliverables/month" },
+      { name: "Account Management (Low)", price: 1250, desc: "Account Management (Liaison & Project)\nLow: Below 10 deliverables/month" },
+      { name: "Content Planning (High)", price: 4500, desc: "Monthly Concept & Content Calendar\nHigh: 20+ deliverables/month" },
+      { name: "Content Planning (Med)", price: 2500, desc: "Monthly Concept & Content Calendar\nMed: 11-20 deliverables/month" },
+      { name: "Content Planning (Low)", price: 1250, desc: "Monthly Concept & Content Calendar\nLow: Below 10 deliverables/month" },
+      { name: "Platform Mgmt (1-2 platforms)", price: 500, desc: "Platform Management\nPublishing / Scheduling Content (1-2 platforms)" },
+      { name: "Platform Mgmt (3-5 platforms)", price: 1000, desc: "Platform Management\nPublishing / Scheduling Content (3-5 platforms)" },
+      { name: "Community Mgmt (Basic)", price: 1250, desc: "Community Management\nMon-Fri, 10AM - 6PM" },
+      { name: "Community Mgmt (Weekend)", price: 1000, desc: "Community Management\nWeekend / After-hours Support" },
+      { name: "Performance Reporting", price: 850, desc: "Monthly Performance Report\nData analysis, insights & next month planning (1x Meeting)" },
+      { name: "Analytics & Social Listening", price: 1500, desc: "Social Listening Setup & Report\nBrand sentiment report (Excludes platform subscription)" }
+    ]
+  },
+  {
+    category: "Creative & Content Production",
+    items: [
+      { name: "Static Visual (Single)", price: 288, desc: "Static Post / Single Image\nGraphic Design (Max 2 minor revisions)" },
+      { name: "Carousel (Up to 10 slides)", price: 850, desc: "Carousel Post\nUp to 10 slides (Max 2 minor revisions)" },
+      { name: "Social Media Banner", price: 400, desc: "Social Media Banner\nFB Header, YouTube Art, etc." },
+      { name: "Copywriting / PR Article", price: 850, desc: "Long form writeup / PR Article\nSEO Blog or PR Text" },
+      { name: "Short Form Video (Reels/TikTok)", price: 1250, desc: "Short Form Video\nMax 90 seconds (Includes editing)" },
+      { name: "Long Form Video (YouTube)", price: 2500, desc: "Core Video / Long Form\n2 - 10 mins (Includes editing)" },
+      { name: "Motion Graphics (30s)", price: 850, desc: "2D Motion Graphics Animation\nMax 30 seconds" },
+      { name: "UGC Creation", price: 500, desc: "User Generated Content\nScripting & Direction (Excludes talent cost)" }
+    ]
+  },
+  {
+    category: "Shooting & Production",
+    items: [
+      { name: "Videoshoot (Full Day)", price: 1900, desc: "Videoshoot / Photoshoot\nSingle session, up to 8 hours (KV Only)" },
+      { name: "Videoshoot (Half Day)", price: 1200, desc: "Videoshoot / Photoshoot\nSingle session, up to 4 hours (KV Only)" },
+      { name: "Pre-Production", price: 850, desc: "Pre-Production\nStoryboard, Site Visit & Planning" }
+    ]
+  },
+  {
+    category: "Advanced Tech (3D & AR)",
+    items: [
+      { name: "3D Product Modelling", price: 3000, desc: "3D Product Modelling\nSingle Product / Medium Complexity (One-time setup)" },
+      { name: "3D Static Visual", price: 950, desc: "3D Static Render\nBased on existing 3D model" },
+      { name: "3D Motion Video (30s)", price: 2000, desc: "3D Motion Animation\nMax 30s (Based on existing 3D model)" },
+      { name: "AR Filter / Games", price: 3000, desc: "Augmented Reality Development\nInstagram/TikTok/FB AR Filter" }
+    ]
+  },
+  {
+    category: "Performance & Media Buy",
+    items: [
+      { name: "Ads Management Fee", price: 1000, desc: "Ads Management Fee\nCampaign setup, optimization & reporting" },
+      { name: "Influencer Mgmt (Fee)", price: 500, desc: "Influencer Mgmt Fee\nCoordination, KPI tracking & reporting" },
+      { name: "Contest Management", price: 1500, desc: "Contest Management\nWinner selection & prize fulfilment management" },
+      { name: "Crisis Management", price: 3000, desc: "Crisis Management\n24-hour monitoring & response per incident" }
+    ]
+  },
+  {
+    category: "Setup & Consultation",
+    items: [
+      { name: "Brand Audit & Setup", price: 1500, desc: "Social Media Revamp & Setup\nProfile audit, Linktree setup, etc. (One-off)" },
+      { name: "Brand Guidelines (CI)", price: 3500, desc: "Visual Identity Setup\nCorporate Identity, colors, typography, Tone of Voice (One-off)" },
+      { name: "Training / Consultation", price: 3000, desc: "Social Media Consult & Training\nHalf-day session (4 Hours) for client's in-house team" }
+    ]
+  }
+];
+
 const tcTemplates = {
+  omnyzo_agency: "1. All creative deliverables include a maximum of TWO (2) minor revisions. Additional revisions will be billed at RM150/hour.\n2. Media spend (Ads), talent fees, software subscriptions, and out-of-pocket expenses are strictly at cost and subject to a 15% Agency Mark-up Fee.\n3. All prices quoted are exclusive of 8% Sales and Service Tax (SST) and other applicable government taxes.\n4. A 50% non-refundable deposit is required before commencement of work, and the remaining 50% balance is due upon project completion.\n5. This quotation is valid for the period stated above.",
   standard: "1. This quotation is valid for the period stated above.\n2. Prices are subject to change upon revision of project scope.\n3. To proceed, please reply with your confirmation or a signed Purchase Order (PO).",
-  deposit50: "1. A 50% non-refundable deposit is required before commencement of work.\n2. The remaining 50% balance is due upon project completion/handover.\n3. Prices are subject to change upon revision of project scope.\n4. This quotation is valid for the period stated above.",
   retainer: "1. This is a monthly retainer agreement.\n2. Invoices will be issued on the 1st of every month, with 7-day payment terms.\n3. Either party may terminate this agreement with a 30-day written notice.\n4. Unused deliverables do not roll over to the next month."
 };
 
@@ -16,23 +84,23 @@ export default function NewQuotationWizard() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true); // 🔴 STATE BARU UNTUK LOADING SUPABASE
+  const [isFetching, setIsFetching] = useState(true); 
   const [contacts, setContacts] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     client_name: "", client_pic: "", client_phone: "", client_email: "", client_address: "",
     quote_no: "Generating...", date: new Date().toISOString().split('T')[0], 
-    validity: "30", valid_until: "", notes: "", terms: tcTemplates.standard 
+    validity: "30", valid_until: "", notes: "", terms: tcTemplates.omnyzo_agency 
   });
   
   const [items, setItems] = useState([
-    { id: Date.now(), type: 'title', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }
+    { id: Date.now(), type: 'item', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }
   ]);
   const [discount, setDiscount] = useState(0);
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      setIsFetching(true); // Mula loading
+      setIsFetching(true); 
       
       const { data: contactData } = await supabase.from("contacts").select("*").eq("contact_type", "Customer");
       if (contactData) {
@@ -57,7 +125,7 @@ export default function NewQuotationWizard() {
         setFormData(p => ({ ...p, quote_no: `${prefix}001` }));
       }
       
-      setIsFetching(false); // Tamat loading
+      setIsFetching(false); 
     };
     
     fetchInitialData();
@@ -96,6 +164,37 @@ export default function NewQuotationWizard() {
   
   const addItem = () => setItems([...items, { id: Date.now(), type: 'item', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
   const addTitle = () => setItems([...items, { id: Date.now(), type: 'title', description: "", qty: 0, price: 0, taxRate: 0, total: 0 }]);
+  
+  // 🔴 LOGIK BARU: Fungsi untuk tambah item dari dropdown Katalog
+  const addCatalogItem = (serviceName: string) => {
+    let selectedService = null;
+    servicesCatalog.forEach(category => {
+      const found = category.items.find(item => item.name === serviceName);
+      if (found) selectedService = found;
+    });
+
+    if (selectedService) {
+      // Jika baris pertama kosong, kita overwrite. Kalau tak, tambah baris baru.
+      const firstItemEmpty = items.length === 1 && items[0].description === "" && items[0].price === 0;
+      
+      const newItem = { 
+        id: Date.now(), 
+        type: 'item', 
+        description: selectedService.desc, 
+        qty: 1, 
+        price: selectedService.price, 
+        taxRate: 0, 
+        total: selectedService.price 
+      };
+
+      if (firstItemEmpty) {
+        setItems([newItem]);
+      } else {
+        setItems([...items, newItem]);
+      }
+    }
+  };
+
   const removeItem = (id: number) => setItems(items.filter(item => item.id !== id));
 
   const subtotal = items.filter(i => i.type === 'item').reduce((sum, item) => sum + item.total, 0);
@@ -154,7 +253,6 @@ export default function NewQuotationWizard() {
             <h1 className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter">New Quotation</h1>
           </div>
           
-          {/* Sembunyikan progress bar masa tengah loading */}
           {!isFetching && (
             <div className="flex items-center gap-2">
               {[1, 2, 3].map((num) => (
@@ -167,7 +265,6 @@ export default function NewQuotationWizard() {
           )}
         </header>
 
-        {/* 🔴 ANIMASI LOADING SEBELUM BORANG KELUAR */}
         {isFetching ? (
           <div className="bg-white/90 dark:bg-[#111111]/90 backdrop-blur-xl p-8 md:p-20 rounded-[32px] shadow-2xl dark:shadow-gray-950/50 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center min-h-[400px] animate-in fade-in duration-500">
             <div className="w-12 h-12 border-4 border-gray-200 dark:border-gray-800 border-t-blue-600 rounded-full animate-spin mb-4"></div>
@@ -208,11 +305,31 @@ export default function NewQuotationWizard() {
 
             {step === 2 && (
               <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 dark:border-gray-800 pb-4 gap-4">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">Items & Pricing</h2>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={addTitle} className="text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-4 py-2 rounded-full hover:scale-105 transition-transform">+ ADD TITLE</button>
-                    <button type="button" onClick={addItem} className="text-xs font-bold bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-4 py-2 rounded-full hover:scale-105 transition-transform">+ ADD ITEM</button>
+                  
+                  {/* 🔴 LOGIK BARU: Menu Dropdown Katalog Servis */}
+                  <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    <select 
+                      className="text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-4 py-2.5 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none shadow-sm hover:scale-105 transition-all"
+                      value=""
+                      onChange={(e) => {
+                        addCatalogItem(e.target.value);
+                        e.target.value = ""; // Reset dropdown lepas klik
+                      }}
+                    >
+                      <option value="" disabled>+ CATALOG SERVICE</option>
+                      {servicesCatalog.map((cat, i) => (
+                        <optgroup key={i} label={cat.category}>
+                          {cat.items.map((item, j) => (
+                            <option key={j} value={item.name}>{item.name} - RM {item.price}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    
+                    <button type="button" onClick={addTitle} className="text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-4 py-2.5 rounded-full hover:scale-105 transition-transform shadow-sm">+ CUSTOM TITLE</button>
+                    <button type="button" onClick={addItem} className="text-xs font-bold bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-4 py-2.5 rounded-full hover:scale-105 transition-transform shadow-sm">+ CUSTOM ITEM</button>
                   </div>
                 </div>
                 
@@ -233,7 +350,7 @@ export default function NewQuotationWizard() {
                             onKeyDown={handleEnterKey} 
                           />
                         </div>
-                        {items.length > 1 && <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 w-8 text-center pt-2">&times;</button>}
+                        <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 w-8 text-center pt-2">&times;</button>
                       </div>
                     ) : (
                       <div key={item.id} className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-gray-50 dark:bg-[#0A0A0A] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 transition-colors">
@@ -251,7 +368,7 @@ export default function NewQuotationWizard() {
                         <div className="w-full md:w-28"><input type="number" placeholder="Price" required step="0.01" className="w-full bg-transparent border-none text-sm text-gray-900 dark:text-white focus:ring-0 p-0 text-left md:text-right" value={item.price} onChange={(e) => handleItemChange(index, 'price', e.target.value)} onKeyDown={handleEnterKey} /></div>
                         <div className="w-full md:w-20"><select className="w-full bg-gray-200 dark:bg-gray-800 rounded-lg border-none text-sm text-gray-900 dark:text-white focus:ring-0 p-2 text-center cursor-pointer appearance-none" value={item.taxRate} onChange={(e) => handleItemChange(index, 'taxRate', e.target.value)}><option value="0">0%</option><option value="6">6%</option><option value="8">8%</option></select></div>
                         <div className="w-full md:w-28 text-left md:text-right text-sm font-bold text-gray-900 dark:text-white">RM {item.total.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</div>
-                        {items.length > 1 && <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 w-8 text-center pt-2 md:pt-0">&times;</button>}
+                        <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 w-8 text-center pt-2 md:pt-0">&times;</button>
                       </div>
                     )
                   ))}
@@ -272,7 +389,12 @@ export default function NewQuotationWizard() {
               <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">Notes & Terms</h2>
                 <div><label className="block text-sm font-medium text-gray-500 mb-2">Notes (Internal or extra details)</label><textarea rows={3} className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Optional notes..."></textarea></div>
-                <div className="pt-4"><div className="flex justify-between items-end mb-2"><label className="block text-sm font-medium text-gray-500">Terms & Conditions</label><select className="bg-gray-100 dark:bg-[#151515] border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer" onChange={(e) => { if (e.target.value !== "custom") { setFormData({ ...formData, terms: tcTemplates[e.target.value as keyof typeof tcTemplates] }); } }}><option value="custom">Load Template...</option><option value="standard">Standard Quote Terms</option><option value="deposit50">Requires 50% Deposit</option><option value="retainer">Monthly Retainer</option></select></div><textarea rows={6} required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors leading-relaxed" value={formData.terms} onChange={e => setFormData({...formData, terms: e.target.value})}></textarea><p className="text-xs text-gray-400 mt-2">* You can edit the generated template above directly.</p></div>
+                <div className="pt-4"><div className="flex justify-between items-end mb-2"><label className="block text-sm font-medium text-gray-500">Terms & Conditions</label><select className="bg-gray-100 dark:bg-[#151515] border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer" onChange={(e) => { if (e.target.value !== "custom") { setFormData({ ...formData, terms: tcTemplates[e.target.value as keyof typeof tcTemplates] }); } }}>
+                  <option value="custom">Load Template...</option>
+                  <option value="omnyzo_agency">Omnyzo Agency T&C (Recommended)</option>
+                  <option value="standard">Standard Quote Terms</option>
+                  <option value="retainer">Monthly Retainer</option>
+                </select></div><textarea rows={6} required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors leading-relaxed" value={formData.terms} onChange={e => setFormData({...formData, terms: e.target.value})}></textarea><p className="text-xs text-gray-400 mt-2">* You can edit the generated template above directly.</p></div>
               </div>
             )}
 

@@ -46,6 +46,28 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
     return <span className="block">{address}</span>;
   };
 
+  // 🔴 LOGIK BARU: Smart Text Formatter untuk Description
+  const formatDescription = (text: string) => {
+    if (!text) return null;
+    const lines = text.split('\n').filter(line => line.trim() !== ''); // Buang baris kosong
+    const title = lines[0]; // Baris pertama jadi Tajuk Utama
+    const details = lines.slice(1); // Baki baris jadi detail/bullet point
+
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="font-bold text-[#000000] text-[13px]">{title}</span>
+        {details.length > 0 && (
+          <ul className="list-disc list-outside ml-4 text-[11px] text-[#6B7280] space-y-0.5 mt-1">
+            {details.map((detail, i) => (
+              /* .replace() tu untuk cuci kalau kau ter-taip tanda tolak (-) kat borang */
+              <li key={i} className="leading-snug">{detail.replace(/^[-•*]\s*/, '')}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32">
       
@@ -63,7 +85,7 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
             
             <div className="p-10 md:p-[50px] text-[#000000] flex-grow flex flex-col">
               
-              {/* HEADER (Dah dicuci) */}
+              {/* HEADER */}
               <div className="flex justify-between items-start mb-12 border-b-2 border-[#F3F4F6] pb-8 avoid-break">
                 <div className="w-1/2">
                   <img src="/logo.png" alt="Omnyzo" className="h-16 mb-2 object-contain" />
@@ -115,7 +137,9 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
                         </tr>
                       ) : (
                         <tr key={idx} className="border-b border-[#E5E7EB] avoid-break">
-                          <td className="py-5 px-2 text-[12px] font-medium leading-relaxed whitespace-pre-wrap text-[#000000]">{item.description}</td>
+                          {/* 🔴 IMPLEMENTASI FORMATTER DISINI */}
+                          <td className="py-5 px-2 align-top">{formatDescription(item.description)}</td>
+                          
                           <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">{item.qty}</td>
                           <td className="py-5 px-2 text-[12px] text-right font-medium text-[#374151] align-top">{Number(item.price).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
                           <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">{item.taxRate ? `${item.taxRate}%` : '-'}</td>
