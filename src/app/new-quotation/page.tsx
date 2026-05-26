@@ -167,7 +167,7 @@ export default function NewQuotationWizard() {
   
   // 🔴 LOGIK BARU: Fungsi untuk tambah item dari dropdown Katalog
   const addCatalogItem = (serviceName: string) => {
-    let selectedService = null;
+    let selectedService: any = null;
     servicesCatalog.forEach(category => {
       const found = category.items.find(item => item.name === serviceName);
       if (found) selectedService = found;
