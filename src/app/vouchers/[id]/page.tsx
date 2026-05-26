@@ -39,7 +39,8 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
         }
 
         rawText = rawText.replace(/^Payment to\s*/i, '');
-        const textParts = rawText.split(' - ').map(p => p.trim());
+        // 🔴 FIX: Tambah (p: any)
+        const textParts = rawText.split(' - ').map((p: any) => p.trim());
         
         let finalName = "Vendor / Freelancer";
         let finalDesc = rawText;
@@ -73,9 +74,9 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
             setFreelancer(foundContact);
             finalName = foundContact.name; 
             
-            const remainingParts = textParts.filter(p => p !== matchedPart);
+            // 🔴 FIX: Tambah (p: any)
+            const remainingParts = textParts.filter((p: any) => p !== matchedPart);
             
-            // 🔴 LOGIK BARU: Jika tiada baki ayat (user cuma masukkan nama), guna Role
             if (remainingParts.length > 0) {
               finalDesc = remainingParts.join(' - ');
             } else {
