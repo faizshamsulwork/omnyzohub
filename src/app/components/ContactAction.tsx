@@ -3,6 +3,7 @@
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function ContactAction({ id }: { id: string }) {
   const router = useRouter();
@@ -27,7 +28,19 @@ export default function ContactAction({ id }: { id: string }) {
   };
 
   return (
-    <div className="flex items-center justify-end">
+    <div className="flex items-center justify-end gap-2">
+      {/* BUTANG EDIT */}
+      <Link 
+        href={`/edit-contact/${id}`} 
+        className="text-gray-600 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 hover:shadow-[0_0_15px_rgba(96,165,250,0.3)] transition-all duration-300 active:scale-95"
+        title="Edit Contact"
+      >
+        <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+      </Link>
+
+      {/* BUTANG DELETE */}
       <button
         onClick={deleteContact}
         disabled={isDeleting}

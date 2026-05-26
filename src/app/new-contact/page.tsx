@@ -86,7 +86,32 @@ export default function NewContact() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">Bank Info *</label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <select name="bank_name" required className="w-full p-3.5 bg-gray-50 dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none appearance-none transition-colors" onChange={handleChange}>
-                    <option value="">Select Bank...</option><option value="Maybank">Maybank</option><option value="CIMB">CIMB</option><option value="Public Bank">Public Bank</option><option value="RHB">RHB</option>
+                    <option value="">Select Bank...</option>
+                    
+                    {/* LOGIK BARU: Susunan Kategori Bank */}
+                    <optgroup label="Malaysia">
+                      <option value="Maybank">Maybank</option>
+                      <option value="CIMB">CIMB</option>
+                      <option value="Public Bank">Public Bank</option>
+                      <option value="RHB">RHB</option>
+                      <option value="Hong Leong Bank">Hong Leong Bank</option>
+                    </optgroup>
+                    
+                    <optgroup label="Indonesia">
+                      <option value="BCA">BCA (Bank Central Asia)</option>
+                      <option value="Bank Mandiri">Bank Mandiri</option>
+                      <option value="BNI">BNI (Bank Negara Indonesia)</option>
+                      <option value="BRI">BRI (Bank Rakyat Indonesia)</option>
+                      <option value="CIMB Niaga">CIMB Niaga</option>
+                    </optgroup>
+                    
+                    <optgroup label="E-Wallets">
+                      <option value="GoPay">GoPay</option>
+                      <option value="OVO">OVO</option>
+                      <option value="DANA">DANA</option>
+                    </optgroup>
+                    
+                    <option value="Others">Others / Wise</option>
                   </select>
                   <input type="text" name="bank_account" placeholder="Account No." required className="w-full p-3.5 bg-gray-50 dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
                 </div>

@@ -24,7 +24,7 @@ export default function NewExpense() {
     payment_proof_url: ""
   });
 
-  // 🔴 LOGIK BARU: Tarik senarai Freelancer masa page loading
+  // LOGIK BARU: Tarik senarai Freelancer masa page loading
   useEffect(() => {
     const fetchFreelancers = async () => {
       const { data } = await supabase
@@ -166,7 +166,7 @@ export default function NewExpense() {
               <span className="text-blue-500 font-bold">*</span> Indicates expenses generally tax-deductible under LHDN guidelines.
             </p>
 
-            {/* 🔴 LOGIK BARU: DROPDOWN EXTRA UNTUK FREELANCER MUNCUL BILA DIPILIH */}
+            {/* DROPDOWN EXTRA UNTUK FREELANCER MUNCUL BILA DIPILIH */}
             {formData.category === "Professional Fees (Vendors) *" && (
               <div className="mt-4 p-5 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800/50 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
                 <label className="block text-xs font-bold text-purple-700 dark:text-purple-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -178,10 +178,16 @@ export default function NewExpense() {
                   onChange={(e) => {
                     const selectedName = e.target.value;
                     if (selectedName) {
-                      const currentDesc = formData.description.trim();
-                      // Auto-masuk nama: Kalau description dah ada teks, dia akan letak " - Nama". Kalau kosong, dia isi nama je.
-                      const newDesc = currentDesc === "" ? selectedName : `${currentDesc} - ${selectedName}`;
-                      setFormData({ ...formData, description: newDesc });
+                      // 1. Cari data penuh freelancer dari database list
+                      const selectedFreelancer = freelancers.find(f => f.name === selectedName);
+                      
+                      // 2. Tarik jawatan (Role) dia. Kalau kosong, letak default
+                      const role = selectedFreelancer?.service_role 
+                        ? `${selectedFreelancer.service_role} Fee` 
+                        : "Professional Services";
+                        
+                      // 3. Automatik formatkan ayat cantik-cantik & overwrite kotak description
+                      setFormData({ ...formData, description: `${role} - ${selectedName}` });
                     }
                   }}
                   defaultValue=""
