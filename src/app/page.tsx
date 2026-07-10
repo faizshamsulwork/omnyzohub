@@ -3,11 +3,27 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import Link from "next/link";
+import type { Expense, Invoice } from "./lib/types";
+import { isPaidStatus, isSuperadminEmail, parseStoredJson } from "./lib/utils";
+
+const defaultReliefs = {
+  individu: 9000,
+  pasangan: 0,
+  taska: 0,
+  ibu_bapa: 0,
+  gaya_hidup: 2500,
+  sukan: 0,
+  perubatan: 0,
+  kwsp: 4000,
+  insurans_nyawa: 3000,
+  sspn: 0,
+  prs: 0
+};
 
 export default function Dashboard() {
   const [userEmail, setUserEmail] = useState("");
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // PRIVACY MODE STATE
@@ -18,19 +34,7 @@ export default function Dashboard() {
   const [showTaxModal, setShowTaxModal] = useState(false);
 
   // PELEPASAN TERPERINCI (LHDN Defaults - Dikemaskini dengan kategori penuh)
-  const [reliefs, setReliefs] = useState({
-    individu: 9000,
-    pasangan: 0,       // Pelepasan Suami/Isteri (Max RM 4,000)
-    taska: 0,          // Yuran Taska/Tadika (Max RM 3,000)
-    ibu_bapa: 0,       // Perubatan/Penjagaan Ibu Bapa (Max RM 8,000)
-    gaya_hidup: 2500,
-    sukan: 0,          // Gaya Hidup - Sukan (Max RM 1,000)
-    perubatan: 0,
-    kwsp: 4000,
-    insurans_nyawa: 3000,
-    sspn: 0,           // Skim Simpanan Pendidikan Nasional (Max RM 8,000)
-    prs: 0             // Skim Persaraan Swasta (Max RM 3,000)
-  });
+  const [reliefs, setReliefs] = useState(defaultReliefs);
   
   // STATE KHAS UNTUK ANAK (Multiplier)
   const [bilanganAnak, setBilanganAnak] = useState<number>(2);
@@ -40,15 +44,19 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUserEmail(session?.user?.email || "");
+      const email = session?.user?.email || "";
+      const isAdmin = isSuperadminEmail(email);
+      setUserEmail(email);
 
-      const [invRes, expRes] = await Promise.all([
-        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
-        supabase.from('expenses').select('*').order('date', { ascending: false })
-      ]);
+      if (isAdmin) {
+        const [invRes, expRes] = await Promise.all([
+          supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+          supabase.from('expenses').select('*').order('date', { ascending: false })
+        ]);
 
-      if (invRes.data) setInvoices(invRes.data);
-      if (expRes.data) setExpenses(expRes.data);
+        if (invRes.data) setInvoices(invRes.data);
+        if (expRes.data) setExpenses(expRes.data);
+      }
 
       const savedSalary = localStorage.getItem("omnyzo_monthly_salary");
       const savedReliefs = localStorage.getItem("omnyzo_tax_reliefs_v4"); // Tukar ke v4 sebab struktur data berubah
@@ -56,9 +64,9 @@ export default function Dashboard() {
       const savedHide = localStorage.getItem("omnyzo_hide_numbers");
       
       if (savedSalary) setMonthlySalary(Number(savedSalary));
-      if (savedReliefs) setReliefs(JSON.parse(savedReliefs));
+      if (savedReliefs) setReliefs(parseStoredJson(savedReliefs, defaultReliefs));
       if (savedAnak) setBilanganAnak(Number(savedAnak));
-      if (savedHide) setHideNumbers(JSON.parse(savedHide));
+      if (savedHide) setHideNumbers(parseStoredJson(savedHide, false));
 
       setIsLoading(false);
     };
@@ -81,14 +89,14 @@ export default function Dashboard() {
     localStorage.setItem("omnyzo_hide_numbers", JSON.stringify(newVal));
   };
 
-  const isSuperadmin = userEmail === "faiz@omnyzo.com";
+  const isSuperadmin = isSuperadminEmail(userEmail);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">Loading Dashboard...</div>;
   }
 
   // PENGIRAAN P&L
-  const paidInvoices = invoices.filter(inv => inv.status === 'paid');
+  const paidInvoices = invoices.filter(inv => isPaidStatus(inv.status));
   const totalRevenue = paidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
   const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const netProfit = totalRevenue - totalExpenses;
@@ -115,6 +123,7 @@ export default function Dashboard() {
   const progressPercent = chargeableIncome >= 600000 ? 100 : ((chargeableIncome - currentBracketBase) / (nextBracketThreshold - currentBracketBase)) * 100;
 
   const blurClass = hideNumbers ? "blur-[8px] opacity-40 select-none transition-all duration-500" : "transition-all duration-500";
+  const taxGlowClass = taxRate >= 25 ? "bg-red-500" : taxRate >= 11 ? "bg-orange-500" : "bg-blue-500";
 
   return (
     <div className="min-h-screen p-8 md:p-12 relative transition-colors duration-500 pb-32">
@@ -171,7 +180,7 @@ export default function Dashboard() {
             </div>
 
             <div className="bg-gradient-to-br from-gray-900 to-black dark:from-[#111] dark:to-[#0a0a0a] p-8 rounded-[32px] shadow-2xl mb-12 border border-gray-800 animate-in fade-in slide-in-from-bottom-8 duration-700 relative overflow-hidden">
-              <div className={`absolute top-0 right-0 w-64 h-64 bg-${taxRate >= 25 ? 'red' : taxRate >= 11 ? 'orange' : 'blue'}-500 opacity-10 blur-[100px] rounded-full pointer-events-none`}></div>
+              <div className={`absolute top-0 right-0 w-64 h-64 ${taxGlowClass} opacity-10 blur-[100px] rounded-full pointer-events-none`}></div>
 
               <div className="flex justify-between items-start mb-6 relative z-10">
                 <div>

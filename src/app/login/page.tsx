@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,8 +26,8 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       toast.success("Welcome to Omnyzo Hub", { id: toastId });
-      // HARD REDIRECT UNTUK ELAK SANGKUT DAN LOAD DASHBOARD DENGAN CEPAT
-      window.location.href = "/";
+      router.replace("/");
+      router.refresh();
     }
   };
 

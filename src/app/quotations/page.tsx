@@ -7,7 +7,7 @@ export const revalidate = 0;
 export default async function QuotationsPage() {
   const { data: quotes } = await supabase
     .from('quotations')
-    .select('*')
+    .select('id,created_at,quote_no,client_name,date,total,status')
     .order('created_at', { ascending: false });
 
   const totalQuotes = quotes?.length || 0;

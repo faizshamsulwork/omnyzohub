@@ -1,17 +1,38 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Raw images keep the print/PDF capture stable. */
+
 import { useEffect, useState, use } from "react";
 import { supabase } from "../../lib/supabase"; 
 import Link from "next/link";
 import PrintButton from "../../components/PrintButton"; 
+import { COMPANY_PROFILE } from "../../lib/company";
+import type { Contact, Expense } from "../../lib/types";
+import { parseExpenseDescription } from "../../lib/utils";
+
+interface ParsedVoucherData {
+  voucherNo: string;
+  name: string;
+  itemDesc: string;
+  paidPersonally: boolean;
+  originalVendorName: string | null;
+  reimbursementTo: string | null;
+}
 
 export default function VoucherViewer({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const voucherId = resolvedParams.id;
 
-  const [expense, setExpense] = useState<any>(null);
-  const [freelancer, setFreelancer] = useState<any>(null);
-  const [parsedData, setParsedData] = useState({ voucherNo: "PV-UNKNOWN", name: "Unknown", itemDesc: "" });
+  const [expense, setExpense] = useState<Expense | null>(null);
+  const [freelancer, setFreelancer] = useState<Contact | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedVoucherData>({
+    voucherNo: "PV-UNKNOWN",
+    name: "Unknown",
+    itemDesc: "",
+    paidPersonally: false,
+    originalVendorName: null,
+    reimbursementTo: null,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -27,46 +48,53 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
       if (expError) console.error("Error fetching expense:", expError);
       
       if (expData) {
-        setExpense(expData);
+        const typedExpense = expData as Expense;
+        setExpense(typedExpense);
         
-        let vNo = expData.id.substring(0,8).toUpperCase(); 
-        const pvMatch = expData.description.match(/^\[(.*?)\]\s*(.*)$/);
-        let rawText = expData.description;
-
-        if (pvMatch) {
-          vNo = pvMatch[1].trim();
-          rawText = pvMatch[2].trim();
-        }
-
-        rawText = rawText.replace(/^Payment to\s*/i, '');
-        // 🔴 FIX: Tambah (p: any)
-        const textParts = rawText.split(' - ').map((p: any) => p.trim());
+        const parsedExpense = parseExpenseDescription(typedExpense.description);
+        const vNo = parsedExpense.voucherNo || typedExpense.id.substring(0,8).toUpperCase();
+        const rawText = parsedExpense.itemDesc;
+        const textParts = rawText.split(' - ').map((p: string) => p.trim());
         
-        let finalName = "Vendor / Freelancer";
+        let finalName = parsedExpense.reimbursementTo || parsedExpense.payeeName || "Vendor / Freelancer";
         let finalDesc = rawText;
+        if (parsedExpense.paidPersonally) setFreelancer(null);
 
-        const { data: contacts } = await supabase.from("contacts").select("*");
-        
-        if (contacts && contacts.length > 0) {
-          let foundContact = null;
+        const { data: contacts } = parsedExpense.paidPersonally
+          ? { data: null }
+          : await supabase
+            .from("contacts")
+            .select("*")
+            .eq("contact_type", "Freelancer");
+
+        if (!parsedExpense.paidPersonally && contacts && contacts.length > 0) {
+          const typedContacts = contacts as Contact[];
+          let foundContact: Contact | null = null;
           let matchedPart = "";
 
-          for (const part of textParts) {
-            const cleanPart = part.replace(/\(.*?\)/g, '').trim().toLowerCase();
-            if (cleanPart.length < 3) continue;
+          const contactMatchesText = (contact: Contact, value: string) => {
+            const cleanValue = value.replace(/\(.*?\)/g, '').trim().toLowerCase();
+            const contactName = contact.name.toLowerCase();
+            if (cleanValue.length < 3) return false;
+            if (contactName === cleanValue || contactName.includes(cleanValue) || cleanValue.includes(contactName)) return true;
 
-            const match = contacts.find((c: any) => {
-              const cName = c.name.toLowerCase();
-              if (cName.includes(cleanPart) || cleanPart.includes(cName)) return true;
-              
-              const nameWords = cName.split(' ').filter((w: string) => w.length > 3 && !['binti','mohd','syed','bin'].includes(w));
-              return nameWords.some((w: string) => cleanPart.includes(w));
-            });
+            const nameWords = contactName.split(' ').filter((w: string) => w.length > 3 && !['binti','mohd','syed','bin'].includes(w));
+            return nameWords.some((w: string) => cleanValue.includes(w));
+          };
 
-            if (match) {
-              foundContact = match;
-              matchedPart = part;
-              break;
+          if (parsedExpense.payeeName) {
+            foundContact = typedContacts.find((contact) => contactMatchesText(contact, parsedExpense.payeeName || "")) || null;
+          }
+
+          if (!foundContact && !parsedExpense.payeeName) {
+            for (const part of textParts) {
+              const match = typedContacts.find((contact) => contactMatchesText(contact, part));
+
+              if (match) {
+                foundContact = match;
+                matchedPart = part;
+                break;
+              }
             }
           }
 
@@ -74,8 +102,7 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
             setFreelancer(foundContact);
             finalName = foundContact.name; 
             
-            // 🔴 FIX: Tambah (p: any)
-            const remainingParts = textParts.filter((p: any) => p !== matchedPart);
+            const remainingParts = textParts.filter((p: string) => p !== matchedPart);
             
             if (remainingParts.length > 0) {
               finalDesc = remainingParts.join(' - ');
@@ -85,12 +112,18 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                 : "Professional Services Rendered";
             }
           } else {
-             finalName = textParts.length > 1 ? textParts[0] : rawText.split(' ')[0];
-             finalDesc = textParts.length > 1 ? textParts.slice(1).join(' - ') : rawText;
+            setFreelancer(null);
           }
         }
 
-        setParsedData({ voucherNo: vNo, name: finalName, itemDesc: finalDesc });
+        setParsedData({
+          voucherNo: vNo,
+          name: finalName,
+          itemDesc: finalDesc,
+          paidPersonally: parsedExpense.paidPersonally,
+          originalVendorName: parsedExpense.originalVendorName,
+          reimbursementTo: parsedExpense.reimbursementTo,
+        });
       }
       
       setIsLoading(false);
@@ -102,8 +135,9 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
   if (isLoading) return <div className="min-h-screen flex items-center justify-center font-bold animate-pulse text-gray-500">Loading Payment Voucher...</div>;
   if (!expense) return <div className="min-h-screen flex items-center justify-center text-red-500 font-bold text-xl">Voucher not found.</div>;
 
-  const documentTitle = `Payment Voucher ${parsedData.voucherNo}`;
-  const pdfFilename = `${parsedData.voucherNo}_Payment_Voucher.pdf`;
+  const voucherTitle = parsedData.paidPersonally ? "Reimbursement Voucher" : "Payment Voucher";
+  const documentTitle = `${voucherTitle} ${parsedData.voucherNo}`;
+  const pdfFilename = `${parsedData.voucherNo}_${parsedData.paidPersonally ? "Reimbursement" : "Payment"}_Voucher.pdf`;
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32 transition-colors duration-300">
@@ -130,11 +164,15 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
               <div className="flex justify-between items-start mb-12 border-b-2 border-[#F3F4F6] pb-8 avoid-break">
                 <div className="w-1/2">
                   <img src="/logo.png" alt="Omnyzo" className="h-16 mb-2 object-contain" />
-                  <h1 className="text-[14px] font-black tracking-widest text-[#000000] uppercase mb-1">Omnyzo Agency</h1>
+                  <h1 className="text-[14px] font-black tracking-widest text-[#000000] uppercase mb-1">{COMPANY_PROFILE.legalName}</h1>
+                  <p className="text-[9px] text-[#6B7280] leading-snug max-w-[260px]">
+                    Registration No: {COMPANY_PROFILE.registrationNo}<br />
+                    {COMPANY_PROFILE.email}
+                  </p>
                 </div>
                 <div className="w-1/2 text-right">
                   <h2 className="text-[28px] font-black tracking-tighter text-[#000000] mb-4 uppercase text-purple-800">
-                    Payment Voucher
+                    {voucherTitle}
                   </h2>
                   
                   <table className="w-full text-[11px] text-[#374151] ml-auto">
@@ -159,9 +197,15 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
               {/* MAKLUMAT FREELANCER / VENDOR */}
               <div className="mb-10 pt-2 avoid-break">
                 <h3 className="text-[10px] font-black text-purple-800 uppercase tracking-widest mb-2 border-l-2 border-purple-800 pl-3">
-                  Paid To
+                  {parsedData.paidPersonally ? "Reimbursed To" : "Paid To"}
                 </h3>
                 <p className="text-[16px] font-bold text-[#000000] leading-snug pl-3">{parsedData.name}</p>
+                {parsedData.paidPersonally && (
+                  <div className="mt-3 ml-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-900">
+                    <p className="font-black uppercase tracking-widest">Original Vendor / Merchant</p>
+                    <p className="mt-1 font-bold text-[#000000]">{parsedData.originalVendorName || "Not recorded"}</p>
+                  </div>
+                )}
                 {freelancer && (
                   <div className="mt-2 space-y-1 pl-3">
                     {freelancer.service_role && <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">{freelancer.service_role}</p>}
@@ -183,7 +227,14 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                   </thead>
                   <tbody>
                     <tr className="border-b border-[#E5E7EB] avoid-break">
-                      <td className="py-5 px-2 text-[12px] font-medium leading-relaxed whitespace-pre-wrap text-[#000000]">{parsedData.itemDesc}</td>
+                      <td className="py-5 px-2 text-[12px] font-medium leading-relaxed whitespace-pre-wrap text-[#000000]">
+                        {parsedData.itemDesc}
+                        {parsedData.paidPersonally && parsedData.originalVendorName && (
+                          <span className="mt-2 block text-[10px] font-bold uppercase tracking-widest text-[#6B7280]">
+                            Paid personally for: {parsedData.originalVendorName}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">1</td>
                       <td className="py-5 px-2 text-[12px] text-right font-bold text-[#000000] align-top">{Number(expense.amount).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
                     </tr>
@@ -196,7 +247,7 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                 <div className="w-[70%] md:w-[45%]">
                   <div className="flex justify-between items-center border-y-2 border-[#000000] py-3 mt-1 bg-purple-50 px-2 border-purple-800 border-b-2">
                     <span className="font-black text-[14px] uppercase tracking-widest text-purple-900">
-                      Total Paid
+                      {parsedData.paidPersonally ? "Total Reimbursed" : "Total Paid"}
                     </span>
                     <span className="text-[18px] font-black text-purple-900">
                       RM {Number(expense.amount).toLocaleString('en-MY', {minimumFractionDigits:2})}
@@ -210,7 +261,7 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                 <div>
                   <div className="border border-[#000000] p-5 w-full">
                     <h4 className="text-[11px] font-black mb-3 text-[#000000] uppercase tracking-widest">
-                      Transfer Details (Beneficiary)
+                      Transfer Details ({parsedData.paidPersonally ? "Claimant" : "Beneficiary"})
                     </h4>
                     {freelancer && freelancer.bank_account ? (
                       <table className="w-full text-[11px]">
@@ -220,6 +271,8 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                           <tr><td className="py-1 font-bold text-[#374151] w-28">Account No</td><td className="py-1 font-black text-purple-700 font-mono tracking-wider">: {freelancer.bank_account}</td></tr>
                         </tbody>
                       </table>
+                    ) : parsedData.paidPersonally ? (
+                      <p className="text-[11px] text-gray-500 italic">Reimbursement payable to claimant. Attach company bank transfer proof once reimbursed.</p>
                     ) : (
                       <p className="text-[11px] text-gray-500 italic">No bank details recorded in contact directory.</p>
                     )}
@@ -236,7 +289,7 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                     />
                     <div className="border-b border-black mb-2 h-16 relative z-0"></div>
                     <p className="text-[10px] font-bold text-[#000000] uppercase tracking-widest relative z-10">Authorized By</p>
-                    <p className="text-[9px] text-[#374151] relative z-10">Faiz Shamsul - Omnyzo Agency</p>
+                    <p className="text-[9px] text-[#374151] relative z-10">Faiz Shamsul - {COMPANY_PROFILE.brandName}</p>
                   </div>
                 </div>
               </div>

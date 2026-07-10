@@ -1,7 +1,10 @@
+/* eslint-disable @next/next/no-img-element -- Raw images keep the print/PDF capture stable. */
+
 import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import PrintButton from "../../components/PrintButton";
+import { isPaidStatus } from "../../lib/utils";
 
 export const revalidate = 0;
 
@@ -15,9 +18,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function ReceiptDocument({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
   const { data: invoice } = await supabase.from("invoices").select("*").eq("id", resolvedParams.id).single();
-  
+
   // Kalau invois belum dibayar, tak patut ada resit
-  if (!invoice || invoice.status !== 'paid') notFound(); 
+  if (!invoice || !isPaidStatus(invoice.status)) notFound();
 
   const { data: client } = await supabase.from("contacts").select("*").eq("name", invoice.client_name).single();
 
@@ -27,7 +30,7 @@ export default async function ReceiptDocument({ params }: { params: Promise<{ id
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-black py-10 px-4 md:px-0 transition-colors print:p-0 print:bg-white">
-      
+
       <div className="max-w-[21cm] mx-auto mb-6 flex justify-between items-center print:hidden">
         <Link href="/invoices" className="text-sm font-medium text-gray-500 hover:text-black dark:text-gray-400 flex items-center gap-2 transition-all active:scale-95">&larr; Back to Invoices</Link>
         <PrintButton documentName={`OR-${invoiceNumber}`} />
@@ -36,7 +39,7 @@ export default async function ReceiptDocument({ params }: { params: Promise<{ id
       <div className="w-full overflow-x-auto pb-10 print:overflow-visible">
         <div className="min-w-[21cm] flex justify-center print:block">
           <div className="w-[21cm] min-h-screen print:min-h-0 bg-white p-12 md:p-16 print:p-0 mx-auto shadow-2xl print:shadow-none text-black transition-all relative">
-            
+
             <div className="relative z-10">
               {/* LOGO & JENIS DOKUMEN */}
               <div className="flex justify-between items-start mb-14 border-b-2 border-gray-100 pb-8">
@@ -104,7 +107,7 @@ export default async function ReceiptDocument({ params }: { params: Promise<{ id
                   </div>
                 </div>
               </div>
-              
+
               <div className="pt-6 border-t border-gray-100 break-inside-avoid text-center mt-20">
                 <p className="text-sm font-bold text-gray-800 mb-2">Thank you for your business!</p>
                 <p className="text-[9px] text-gray-400 italic tracking-widest uppercase">This is a computer-generated receipt. No signature is required.</p>

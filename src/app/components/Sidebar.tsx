@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { isSuperadminEmail } from "../lib/utils";
 import ThemeToggle from "./ThemeToggle";
 import LogoutButton from "./LogoutButton";
 
@@ -30,7 +32,7 @@ export default function Sidebar() {
   if (pathname === "/login") return null;
 
   // TENTUKAN IDENTITI
-  const isSuperadmin = userEmail === "faiz@omnyzo.com";
+  const isSuperadmin = isSuperadminEmail(userEmail);
   
   const displayName = isSuperadmin ? "Faiz" : "Amirun";
   const roleName = isSuperadmin ? "Creative Lead" : "Admin";
@@ -41,10 +43,13 @@ export default function Sidebar() {
       
       {/* BAHAGIAN LOGO (DIBESARKAN & AUTO-PUTIH) */}
       <div className="pt-10 pb-6 px-8 mb-2 flex items-center justify-start">
-        <img 
-          src="/logo.png" 
-          alt="Omnyzo Logo" 
-          className="h-20 w-auto object-contain dark:invert dark:brightness-200 transition-all duration-500 hover:scale-105 drop-shadow-sm" 
+        <Image
+          src="/logo.png"
+          alt="Omnyzo Logo"
+          width={80}
+          height={80}
+          priority
+          className="object-contain dark:invert dark:brightness-200 transition-all duration-500 hover:scale-105 drop-shadow-sm"
         />
       </div>
       

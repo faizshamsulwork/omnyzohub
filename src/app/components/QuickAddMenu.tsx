@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { isSuperadminEmail } from "../lib/utils";
 
 export default function QuickAddMenu() {
   const pathname = usePathname();
@@ -20,6 +21,10 @@ export default function QuickAddMenu() {
       if (session?.user?.email) setUserEmail(session.user.email);
     };
     getUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email || "");
+    });
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -42,13 +47,14 @@ export default function QuickAddMenu() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("focusin", handleFocusIn);
+      subscription.unsubscribe();
     };
   }, []);
 
   // MATIKAN BUTANG JIKA BERADA DI MUKA SURAT LOGIN
   if (pathname === "/login") return null;
 
-  const isSuperadmin = userEmail === "faiz@omnyzo.com";
+  const isSuperadmin = isSuperadminEmail(userEmail);
 
   // SENARAI MENU ASAS
   const menuItems = [

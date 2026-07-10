@@ -64,22 +64,22 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const isFreelancerCompany = type === "Freelancer" && formData.customer_type === "Company";
     
-    // UPDATE LOGIC (Bukan Insert)
     const { error } = await supabase.from("contacts").update({
       contact_type: type, name: formData.name, email: formData.email, phone: formData.phone,
       service_role: type === "Freelancer" ? formData.service_role : null,
       bank_name: type === "Freelancer" ? formData.bank_name : null,
       bank_account: type === "Freelancer" ? formData.bank_account : null,
-      customer_type: type === "Customer" ? formData.customer_type : null,
+      customer_type: type === "Customer" ? formData.customer_type : formData.customer_type,
       pic_name: type === "Customer" ? formData.pic_name : null,
-      tin_no: type === "Customer" ? formData.tin_no : null,
-      ssm_no: type === "Customer" ? formData.ssm_no : null,
-      address: type === "Customer" ? formData.address : null,
-      postcode: type === "Customer" ? formData.postcode : null,
-      city: type === "Customer" ? formData.city : null,
-      state: type === "Customer" ? formData.state : null,
-      country: type === "Customer" ? formData.country : null,
+      tin_no: type === "Customer" || isFreelancerCompany ? formData.tin_no : null,
+      ssm_no: type === "Customer" || isFreelancerCompany ? formData.ssm_no : null,
+      address: type === "Customer" || isFreelancerCompany ? formData.address : null,
+      postcode: type === "Customer" || isFreelancerCompany ? formData.postcode : null,
+      city: type === "Customer" || isFreelancerCompany ? formData.city : null,
+      state: type === "Customer" || isFreelancerCompany ? formData.state : null,
+      country: type === "Customer" || isFreelancerCompany ? formData.country : null,
     }).eq("id", contactId);
 
     if (!error) {
@@ -93,6 +93,7 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
   };
 
   if (fetching) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400 animate-pulse">Loading contact data...</div>;
+  const isFreelancerCompany = type === "Freelancer" && formData.customer_type === "Company";
 
   return (
     <div className="min-h-screen p-8 md:p-12 flex items-center justify-center relative z-10">
@@ -145,6 +146,44 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
                   <input type="text" name="bank_account" placeholder="Account No." required value={formData.bank_account} className="w-full p-3.5 bg-gray-50 dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
                 </div>
               </div>
+              {isFreelancerCompany && (
+                <div className="bg-gray-50 dark:bg-[#111111] p-6 rounded-2xl border border-gray-200 dark:border-gray-800 space-y-6 transition-colors">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">TIN</label>
+                      <input type="text" name="tin_no" value={formData.tin_no} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">SSM No.</label>
+                      <input type="text" name="ssm_no" value={formData.ssm_no} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">Address</label>
+                    <input type="text" name="address" value={formData.address} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">Postcode</label>
+                      <input type="text" name="postcode" value={formData.postcode} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">City</label>
+                      <input type="text" name="city" value={formData.city} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">State</label>
+                      <input type="text" name="state" value={formData.state} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-400 mb-2">Country</label>
+                      <input type="text" name="country" value={formData.country} className="w-full p-3.5 bg-white dark:bg-[#1B1B1E] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:ring-1 outline-none transition-colors" onChange={handleChange} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -2,17 +2,28 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { companyFooterText } from "../lib/company";
+import { getErrorMessage } from "../lib/utils";
+
+type PdfDocument = {
+  setFontSize: (size: number) => void;
+  setTextColor: (r: number, g: number, b: number) => void;
+  splitTextToSize: (text: string, maxWidth: number) => string[];
+  text: (text: string | string[], x: number, y: number, options?: { align?: "center" | "left" | "right" | "justify" }) => void;
+};
 
 interface PrintProps {
   documentName?: string;
   targetId?: string;
   filename?: string;
+  machineReadableText?: string;
 }
 
 export default function PrintButton({ 
   documentName = "Document", 
   targetId = "invoice-document", 
-  filename = "Document.pdf" 
+  filename = "Document.pdf",
+  machineReadableText = "",
 }: PrintProps) {
   
   const [isOpen, setIsOpen] = useState(false);
@@ -66,6 +77,35 @@ export default function PrintButton({
 
       const cssPxToMM = (2 * imgHeightInMM) / canvas.height;
       const containerRect = element.getBoundingClientRect();
+      const mmToCanvasPx = canvas.height / imgHeightInMM;
+      const canvasContext = canvas.getContext("2d");
+
+      const sliceHasVisibleContent = (startMM: number, endMM: number) => {
+        if (!canvasContext) return true;
+
+        const startY = Math.max(0, Math.floor(startMM * mmToCanvasPx));
+        const endY = Math.min(canvas.height, Math.ceil(endMM * mmToCanvasPx));
+        const sliceHeight = endY - startY;
+
+        if (sliceHeight <= 0) return false;
+
+        const imageData = canvasContext.getImageData(0, startY, canvas.width, sliceHeight).data;
+        let visiblePixels = 0;
+
+        for (let i = 0; i < imageData.length; i += 16) {
+          const r = imageData[i];
+          const g = imageData[i + 1];
+          const b = imageData[i + 2];
+          const a = imageData[i + 3];
+
+          if (a > 24 && (r < 248 || g < 248 || b < 248)) {
+            visiblePixels += 1;
+            if (visiblePixels > 80) return true;
+          }
+        }
+
+        return false;
+      };
       
       const avoidElements = document.querySelectorAll('.avoid-break');
       const breaks = Array.from(avoidElements).map(el => {
@@ -77,16 +117,25 @@ export default function PrintButton({
       });
 
       // FUNGSI FOOTER KORPORAT
-      const drawFooter = (doc: any, w: number, h: number) => {
+      const drawFooter = (doc: PdfDocument, w: number, h: number) => {
         doc.setFontSize(7.5); 
         doc.setTextColor(128, 128, 128); 
-        const footerText = "Company Registration No: 202503336982 (MA0340342-V). Registered Office: 2003, The Sky Residensi, Jalan 6/91 Taman Shamelin Perkasa, 56100 Kuala Lumpur, Malaysia. Email: hello@omnyzo.com";
+        const footerText = companyFooterText();
         
         const lines = doc.splitTextToSize(footerText, w - 30);
         const lineHeight = 3.5;
         const startY = h - 10 - ((lines.length - 1) * lineHeight);
 
         doc.text(lines, w / 2, startY, { align: "center" });
+      };
+
+      const drawMachineReadableText = (doc: PdfDocument, w: number) => {
+        if (!machineReadableText.trim()) return;
+
+        doc.setFontSize(1);
+        doc.setTextColor(255, 255, 255);
+        const lines = doc.splitTextToSize(machineReadableText, w - 12);
+        doc.text(lines, 6, 6);
       };
 
       let currentYMM = 0;
@@ -107,6 +156,8 @@ export default function PrintButton({
 
         const sliceHeightMM = pageBottomMM - currentYMM;
 
+        if (!sliceHasVisibleContent(currentYMM, pageBottomMM)) break;
+
         if (currentYMM > 0) pdf.addPage();
 
         pdf.addImage(dataUrl, 'JPEG', 0, marginY - currentYMM, imgWidthInMM, imgHeightInMM);
@@ -124,6 +175,7 @@ export default function PrintButton({
 
         // COP FOOTER YANG KEMAS DI SINI
         drawFooter(pdf, pdfWidth, pageHeightMM);
+        if (currentYMM === 0) drawMachineReadableText(pdf, pdfWidth);
 
         currentYMM = pageBottomMM;
 
@@ -133,9 +185,9 @@ export default function PrintButton({
       pdf.save(filename);
       toast.success("PDF Downloaded successfully!", { id: toastId });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("PDF Engine Error:", error);
-      toast.error(`Failed to generate PDF: ${error.message}`, { id: toastId });
+      toast.error(`Failed to generate PDF: ${getErrorMessage(error)}`, { id: toastId });
     } finally {
       setIsGenerating(false);
     }

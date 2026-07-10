@@ -1,30 +1,44 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Raw images keep the print/PDF capture stable. */
+
 import { useEffect, useState, use } from "react";
 import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 import PrintButton from "../../components/PrintButton";
+import { COMPANY_PROFILE } from "../../lib/company";
+import type { Contact, LineItem, Quotation } from "../../lib/types";
 
 export default function QuotationViewer({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const quoteId = resolvedParams.id;
 
-  const [quote, setQuote] = useState<any>(null);
+  const [quote, setQuote] = useState<Quotation | null>(null);
+  const [client, setClient] = useState<Contact | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchQuote = async () => {
       if (!quoteId) return;
-      setTimeout(async () => {
-        const { data, error } = await supabase
-          .from("quotations")
+      const { data, error } = await supabase
+        .from("quotations")
+        .select("*")
+        .eq("id", quoteId)
+        .single();
+      if (error) console.error("Error fetching quote:", error);
+      setQuote(data);
+
+      if (data?.client_name) {
+        const { data: clientData } = await supabase
+          .from("contacts")
           .select("*")
-          .eq("id", quoteId)
-          .single();
-        if (error) console.error("Error fetching quote:", error);
-        setQuote(data);
-        setIsLoading(false);
-      }, 500);
+          .eq("name", data.client_name)
+          .maybeSingle();
+
+        if (clientData) setClient(clientData as Contact);
+      }
+
+      setIsLoading(false);
     };
     fetchQuote();
   }, [quoteId]);
@@ -67,6 +81,11 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
       </div>
     );
   };
+  const clientIdentifiers = [
+    client?.tin_no ? `TIN: ${client.tin_no}` : null,
+    client?.ssm_no ? `Registration No: ${client.ssm_no}` : null,
+    client?.sst_no ? `SST No: ${client.sst_no}` : null,
+  ].filter(Boolean);
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32">
@@ -89,7 +108,12 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
               <div className="flex justify-between items-start mb-12 border-b-2 border-[#F3F4F6] pb-8 avoid-break">
                 <div className="w-1/2">
                   <img src="/logo.png" alt="Omnyzo" className="h-16 mb-2 object-contain" />
-                  <h1 className="text-[14px] font-black tracking-widest text-[#000000] uppercase mb-1">Omnyzo Agency</h1>
+                  <h1 className="text-[14px] font-black tracking-widest text-[#000000] uppercase mb-1">{COMPANY_PROFILE.legalName}</h1>
+                  <p className="text-[9px] text-[#6B7280] leading-snug max-w-[260px]">
+                    Registration No: {COMPANY_PROFILE.registrationNo}<br />
+                    {COMPANY_PROFILE.registeredOffice}<br />
+                    {COMPANY_PROFILE.email}
+                  </p>
                 </div>
                 <div className="w-1/2 text-right">
                   <h2 className="text-[32px] font-black tracking-tighter text-[#000000] mb-4 uppercase">Quotation</h2>
@@ -112,6 +136,9 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
                 <div className="mt-2 space-y-1 pl-3">
                   {quote.client_pic && <p className="text-[12px] text-[#000000] font-bold">Attn: {quote.client_pic}</p>}
                   {quote.client_address && <div className="text-[11px] text-[#374151] leading-relaxed max-w-[70%]">{formatAddress(quote.client_address)}</div>}
+                  {clientIdentifiers.length > 0 && (
+                    <p className="text-[10px] text-[#374151] pt-1 font-bold">{clientIdentifiers.join(" | ")}</p>
+                  )}
                   {quote.client_email && <p className="text-[11px] text-[#374151] pt-1">{quote.client_email}</p>}
                   {quote.client_phone && <p className="text-[11px] text-[#374151]">{quote.client_phone}</p>}
                 </div>
@@ -130,7 +157,7 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
                     </tr>
                   </thead>
                   <tbody>
-                    {quote.items && quote.items.map((item: any, idx: number) => (
+                    {quote.items && quote.items.map((item: LineItem, idx: number) => (
                       item.type === 'title' ? (
                         <tr key={idx} className="bg-[#F9FAFB] avoid-break">
                           <td colSpan={5} className="py-4 px-2 text-[11px] font-black text-[#000000] uppercase tracking-wider border-b border-[#E5E7EB] whitespace-pre-wrap leading-relaxed">{item.description}</td>

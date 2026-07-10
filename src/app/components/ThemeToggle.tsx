@@ -2,19 +2,21 @@
 
 import { useEffect, useState } from "react";
 
+const getInitialIsDark = () => {
+  if (typeof window === "undefined") return true;
+  return (window.localStorage.getItem("theme") || "dark") === "dark";
+};
+
 export default function ThemeToggle() {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(getInitialIsDark);
 
   useEffect(() => {
-    // Semak setting lama, kalau takde, default kepada dark mode
-    const theme = localStorage.getItem("theme") || "dark";
-    setIsDark(theme === "dark");
-    if (theme === "dark") {
+    if (isDark) {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
-  }, []);
+  }, [isDark]);
 
   const toggleTheme = () => {
     const nextThemeIsDark = !isDark;

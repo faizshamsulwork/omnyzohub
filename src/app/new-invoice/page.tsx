@@ -1,14 +1,25 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { COMPANY_PROFILE } from "../lib/company";
+import {
+  addDaysToDateInput,
+  buildExpenseDescription,
+  buildContactAddress,
+  CONTACT_SELECT_COLUMNS,
+  formatContactOptionLabel,
+  formatDateInputInMalaysia,
+  getErrorMessage,
+} from "../lib/utils";
+import type { Contact, LineItem } from "../lib/types";
 
 const invoiceTemplates = {
-  standard: "1. Unless specified, Agency Fee is payable within 30 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to billings@omnyzo.com.",
-  immediate: "1. Payment is due immediately upon receipt of this invoice.\n2. Please indicate the invoice number as reference when transferring the funds.\n3. Payment advice should be sent to billings@omnyzo.com.",
+  standard: `1. Unless specified, Agency Fee is payable within 30 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to ${COMPANY_PROFILE.billingEmail}.`,
+  immediate: `1. Payment is due immediately upon receipt of this invoice.\n2. Please indicate the invoice number as reference when transferring the funds.\n3. Payment advice should be sent to ${COMPANY_PROFILE.billingEmail}.`,
   milestone: "1. This invoice represents a milestone payment (e.g. 50% Deposit) as agreed in the Quotation.\n2. Work will commence upon clearance of this payment.\n3. Please indicate the invoice number as reference when transferring the funds.",
   voucher: "1. Payment to be transferred to the provided bank account.\n2. Please verify work completion before release of payment."
 };
@@ -17,40 +28,73 @@ export default function NewInvoiceWizard() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactTypeFilter, setContactTypeFilter] = useState("Customer");
-  
+  const [selectedContactId, setSelectedContactId] = useState("");
+
   // Dapatkan tarikh hari ini dalam format YYYY-MM-DD
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = formatDateInputInMalaysia();
 
   const [formData, setFormData] = useState({
     client_name: "", client_pic: "", client_phone: "", client_email: "", client_address: "",
     invoice_no: "Generating...", invoice_date: todayStr, status: "outstanding", credit_term: "14", notes: "", terms: invoiceTemplates.standard
   });
-  
-  const [items, setItems] = useState([{ id: Date.now(), type: 'title', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
+
+  const [items, setItems] = useState<LineItem[]>([{ id: 1, type: 'title', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
   const [discount, setDiscount] = useState(0);
+
+  const handleClientSelect = useCallback((contactId: string, contactList: Contact[]) => {
+    setSelectedContactId(contactId);
+
+    const client = contactList.find(c => c.id === contactId);
+    if (client) {
+      setFormData(prev => ({
+        ...prev, client_name: client.name, client_pic: client.pic_name || "", client_phone: client.phone || "",
+        client_email: client.email || "", client_address: buildContactAddress(client)
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, client_name: "", client_pic: "", client_phone: "", client_email: "", client_address: "" }));
+    }
+  }, []);
 
   // 1. Fetch senarai contact sekali sahaja masa load
   useEffect(() => {
     const fetchContacts = async () => {
-      const { data: contactData } = await supabase.from("contacts").select("*").order("name", { ascending: true });
+      const { data: contactData, error } = await supabase
+        .from("contacts")
+        .select(CONTACT_SELECT_COLUMNS)
+        .order("name", { ascending: true })
+        .order("pic_name", { ascending: true });
+
+      if (error) {
+        toast.error(`Unable to load contacts: ${getErrorMessage(error)}`);
+        return;
+      }
+
       if (contactData) {
-        setContacts(contactData);
-        const filtered = contactData.filter(c => c.contact_type === contactTypeFilter);
-        if (filtered.length > 0) handleClientSelect(filtered[0].name, contactData);
+        const typedContacts = contactData as Contact[];
+        setContacts(typedContacts);
+
+        const defaultContact = typedContacts.find(c => c.contact_type === "Customer");
+        if (defaultContact) handleClientSelect(defaultContact.id, typedContacts);
       }
     };
     fetchContacts();
-  }, [contactTypeFilter]); // Re-fetch client list kalau tukar tab Customer/Freelancer
+  }, [handleClientSelect]);
+
+  const handleContactTypeChange = (nextType: string) => {
+    setContactTypeFilter(nextType);
+    const nextContacts = contacts.filter(c => c.contact_type === nextType);
+    handleClientSelect(nextContacts[0]?.id || "", contacts);
+  };
 
   // 2. 🔴 LOGIK BARU: JANA NOMBOR INVOIS BILA-BILA MASA TARIKH BERUBAH
   useEffect(() => {
     const generateSequenceNumber = async () => {
       if (!formData.invoice_date) return;
-      
+
       setFormData(prev => ({ ...prev, invoice_no: "Generating..." }));
-      
+
       // Tukar "YYYY-MM-DD" kepada "YYYYMMDD"
       const dateParts = formData.invoice_date.split('-');
       if (dateParts.length !== 3) return;
@@ -89,26 +133,14 @@ export default function NewInvoiceWizard() {
     generateSequenceNumber();
   }, [formData.invoice_date, contactTypeFilter]); // 🔴 Dependency array baru: Dengar perubahan tarikh
 
-  const handleClientSelect = (clientName: string, contactList = contacts) => {
-    const client = contactList.find(c => c.name === clientName);
-    if (client) {
-      setFormData(prev => ({ 
-        ...prev, client_name: clientName, client_pic: client.pic_name || "", client_phone: client.phone || "",
-        client_email: client.email || "", client_address: [client.address, client.postcode, client.city, client.state].filter(Boolean).join(", ") || ""
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, client_name: clientName, client_pic: "", client_phone: "", client_email: "", client_address: "" }));
-    }
-  };
-
-  const handleItemChange = (index: number, field: string, value: string | number) => {
+  const handleItemChange = (index: number, field: keyof Pick<LineItem, "description" | "qty" | "price" | "taxRate">, value: string | number) => {
     const newItems = [...items];
-    const val = typeof value === 'string' ? value : Number(value);
-    newItems[index] = { ...newItems[index], [field]: val };
+    const val = field === "description" ? String(value) : Number(value);
+    newItems[index] = { ...newItems[index], [field]: val } as LineItem;
     if (field === 'qty' || field === 'price') newItems[index].total = Number(newItems[index].qty) * Number(newItems[index].price);
     setItems(newItems);
   };
-  
+
   const addItem = () => setItems([...items, { id: Date.now(), type: 'item', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
   const addTitle = () => setItems([...items, { id: Date.now(), type: 'title', description: "", qty: 0, price: 0, taxRate: 0, total: 0 }]);
   const removeItem = (id: number) => setItems(items.filter(item => item.id !== id));
@@ -122,7 +154,7 @@ export default function NewInvoiceWizard() {
     setStep(prev => prev + 1);
   };
   const prevStep = () => setStep(prev => prev - 1);
-  
+
   const handleEnterKey = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addItem(); }
   };
@@ -138,31 +170,28 @@ export default function NewInvoiceWizard() {
     const docName = contactTypeFilter === "Customer" ? "invoice" : "payment voucher";
     const loadingToast = toast.loading(`Saving ${docName}...`);
 
-    const baseDate = new Date(formData.invoice_date);
-    const dueDate = new Date(baseDate);
-    dueDate.setDate(baseDate.getDate() + Number(formData.credit_term));
-    const formattedDueDate = dueDate.toISOString().split('T')[0];
-    const createdAtISO = baseDate.toISOString();
+    const formattedDueDate = addDaysToDateInput(formData.invoice_date, Number(formData.credit_term));
+    const createdAtISO = `${formData.invoice_date}T00:00:00+08:00`;
 
     if (contactTypeFilter === "Customer") {
       const { error } = await supabase.from("invoices").insert([{
-        created_at: createdAtISO, 
-        invoice_no: formData.invoice_no, 
-        client_name: formData.client_name, 
+        created_at: createdAtISO,
+        invoice_no: formData.invoice_no,
+        client_name: formData.client_name,
         client_pic: formData.client_pic,
         client_address: formData.client_address,
         client_phone: formData.client_phone,
         client_email: formData.client_email,
-        description: "Creative Services", 
-        amount: grandTotal, 
+        description: "Creative Services",
+        amount: grandTotal,
         items: items,
         subtotal: subtotal,
         discount: discount,
         tax_amount: totalTaxAmount,
         status: formData.status,
         due_date: formattedDueDate,
-        notes: formData.notes,      
-        terms: formData.terms       
+        notes: formData.notes,
+        terms: formData.terms
       }]);
 
       if (!error) {
@@ -174,12 +203,17 @@ export default function NewInvoiceWizard() {
         setLoading(false);
       }
     } else {
-      const descText = `[${formData.invoice_no}] Payment to ${formData.client_name} - ${items.find(i => i.type === 'item')?.description || "Freelance Services"}`;
+      const descText = buildExpenseDescription({
+        voucherNo: formData.invoice_no,
+        payeeName: formData.client_name,
+        itemDesc: items.find(i => i.type === 'item')?.description || "Freelance Services",
+      });
       const { error } = await supabase.from("expenses").insert([{
         description: descText,
         amount: grandTotal,
         category: "Professional Fees (Vendors) *",
         date: formData.invoice_date,
+        status: formData.status === "paid" ? "Paid" : "Outstanding",
       }]);
 
       if (!error) {
@@ -216,25 +250,25 @@ export default function NewInvoiceWizard() {
         </header>
 
         <form onSubmit={handleSubmit} className="bg-white/90 dark:bg-[#111111]/90 backdrop-blur-xl p-8 md:p-10 rounded-[32px] shadow-2xl dark:shadow-gray-950/50 border border-gray-200 dark:border-gray-800 transition-colors duration-500">
-          
+
           {step === 1 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">
                 {contactTypeFilter === "Customer" ? "Invoice Details" : "Payment Details"}
               </h2>
               <div className="bg-gray-50 dark:bg-[#0A0A0A] p-2 rounded-xl border border-gray-200 dark:border-gray-800 flex inline-flex w-full md:w-auto">
-                <button type="button" onClick={() => setContactTypeFilter("Customer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Customer" ? "bg-white dark:bg-gray-800 shadow-sm text-blue-600 dark:text-blue-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Billed to Customer</button>
-                <button type="button" onClick={() => setContactTypeFilter("Freelancer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Freelancer" ? "bg-white dark:bg-gray-800 shadow-sm text-purple-600 dark:text-purple-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Pay to Freelancer</button>
+                <button type="button" onClick={() => handleContactTypeChange("Customer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Customer" ? "bg-white dark:bg-gray-800 shadow-sm text-blue-600 dark:text-blue-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Billed to Customer</button>
+                <button type="button" onClick={() => handleContactTypeChange("Freelancer")} className={`flex-1 md:w-40 py-2.5 px-4 rounded-lg text-sm font-bold transition-all ${contactTypeFilter === "Freelancer" ? "bg-white dark:bg-gray-800 shadow-sm text-purple-600 dark:text-purple-400" : "text-gray-500 hover:text-gray-900 dark:hover:text-gray-300"}`}>Pay to Freelancer</button>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-500 mb-2">Select {contactTypeFilter} *</label>
-                  <select required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.client_name} onChange={e => handleClientSelect(e.target.value)}>
+                  <select required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={selectedContactId} onChange={e => handleClientSelect(e.target.value, contacts)}>
                     {filteredContacts.length === 0 && <option value="">No {contactTypeFilter.toLowerCase()}s found.</option>}
-                    {filteredContacts.map((c, i) => <option key={i} value={c.name}>{c.name}</option>)}
+                    {filteredContacts.map((c) => <option key={c.id} value={c.id}>{formatContactOptionLabel(c)}</option>)}
                   </select>
-                  
+
                   {formData.client_name && (
                     <div className={`mt-4 p-5 border rounded-2xl animate-in fade-in duration-300 ${contactTypeFilter === 'Customer' ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30' : 'bg-purple-50/50 dark:bg-purple-900/10 border-purple-100 dark:border-purple-900/30'}`}>
                       <h4 className={`text-[10px] font-black uppercase tracking-widest mb-3 ${contactTypeFilter === 'Customer' ? 'text-blue-800 dark:text-blue-400' : 'text-purple-800 dark:text-purple-400'}`}>
@@ -254,12 +288,12 @@ export default function NewInvoiceWizard() {
                   <label className="block text-sm font-medium text-gray-500 mb-2">
                     {contactTypeFilter === "Customer" ? "Invoice Date *" : "Voucher Date *"}
                   </label>
-                  <input 
-                    type="date" 
-                    required 
-                    className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" 
-                    value={formData.invoice_date} 
-                    onChange={e => setFormData({...formData, invoice_date: e.target.value})} 
+                  <input
+                    type="date"
+                    required
+                    className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                    value={formData.invoice_date}
+                    onChange={e => setFormData({...formData, invoice_date: e.target.value})}
                   />
                 </div>
 
@@ -282,7 +316,7 @@ export default function NewInvoiceWizard() {
                     )}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-2">Payment Status *</label>
                   <select className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
@@ -302,7 +336,7 @@ export default function NewInvoiceWizard() {
                   <button type="button" onClick={addItem} className="text-xs font-bold bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-4 py-2 rounded-full hover:scale-105 transition-transform">+ ADD ITEM</button>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="hidden md:flex gap-4 px-4 text-xs font-bold text-gray-400 uppercase tracking-widest"><div className="flex-1">Description</div><div className="w-16 text-center">Qty</div><div className="w-28 text-right">Price (RM)</div><div className="w-20 text-center">Tax</div><div className="w-28 text-right">Amount</div><div className="w-8"></div></div>
                 {items.map((item, index) => (
@@ -342,13 +376,13 @@ export default function NewInvoiceWizard() {
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">Notes & Terms</h2>
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-2">Notes (Internal or extra details)</label>
-                <textarea rows={3} className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Optional notes..."></textarea>
+                <label className="block text-sm font-medium text-gray-500 mb-2">Client References / Notes</label>
+                <textarea rows={3} className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder={"PO No: \nProject Ref: \nPayment Ref: "}></textarea>
               </div>
               <div className="pt-4">
                 <div className="flex justify-between items-end mb-2">
                   <label className="block text-sm font-medium text-gray-500">Terms & Conditions</label>
-                  <select 
+                  <select
                     className="bg-gray-100 dark:bg-[#151515] border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer"
                     onChange={(e) => {
                       if (e.target.value !== "custom") setFormData({ ...formData, terms: invoiceTemplates[e.target.value as keyof typeof invoiceTemplates] });

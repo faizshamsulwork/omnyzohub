@@ -1,12 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import {
+  addDaysToDateInput,
+  buildContactAddress,
+  CONTACT_SELECT_COLUMNS,
+  formatContactOptionLabel,
+  formatDateInputInMalaysia,
+  getErrorMessage,
+} from "../lib/utils";
+import type { Contact, LineItem } from "../lib/types";
 
 // 🔴 LOGIK BARU: Pangkalan Data Mini untuk Harga Omnyzo Agency
+type ServiceCatalogItem = {
+  name: string;
+  price: number;
+  desc: string;
+};
+
 const servicesCatalog = [
   {
     category: "Strategy, Mgmt & Reporting",
@@ -75,99 +90,117 @@ const servicesCatalog = [
 ];
 
 const tcTemplates = {
-  omnyzo_agency: "1. All creative deliverables include a maximum of TWO (2) minor revisions. Additional revisions will be billed at RM150/hour.\n2. Media spend (Ads), talent fees, software subscriptions, and out-of-pocket expenses are strictly at cost and subject to a 15% Agency Mark-up Fee.\n3. All prices quoted are exclusive of 8% Sales and Service Tax (SST) and other applicable government taxes.\n4. A 50% non-refundable deposit is required before commencement of work, and the remaining 50% balance is due upon project completion.\n5. This quotation is valid for the period stated above.",
+  omnyzo_agency: "1. All creative deliverables include a maximum of TWO (2) minor revisions. Additional revisions will be billed at RM150/hour.\n2. Media spend (Ads), talent fees, software subscriptions, and out-of-pocket expenses are strictly at cost and subject to a 15% Agency Mark-up Fee.\n3. Any applicable SST or government taxes will be charged only where required by law and stated on the invoice.\n4. A 50% non-refundable deposit is required before commencement of work, and the remaining 50% balance is due upon project completion.\n5. This quotation is valid for the period stated above.",
   standard: "1. This quotation is valid for the period stated above.\n2. Prices are subject to change upon revision of project scope.\n3. To proceed, please reply with your confirmation or a signed Purchase Order (PO).",
   retainer: "1. This is a monthly retainer agreement.\n2. Invoices will be issued on the 1st of every month, with 7-day payment terms.\n3. Either party may terminate this agreement with a 30-day written notice.\n4. Unused deliverables do not roll over to the next month."
+};
+
+const calculateValidUntil = (date: string, validity: string) => {
+  if (!date || !validity) return "";
+  return addDaysToDateInput(date, parseInt(validity));
 };
 
 export default function NewQuotationWizard() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true); 
-  const [contacts, setContacts] = useState<any[]>([]);
-  
+  const [isFetching, setIsFetching] = useState(true);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const todayStr = formatDateInputInMalaysia();
+
   const [formData, setFormData] = useState({
     client_name: "", client_pic: "", client_phone: "", client_email: "", client_address: "",
-    quote_no: "Generating...", date: new Date().toISOString().split('T')[0], 
-    validity: "30", valid_until: "", notes: "", terms: tcTemplates.omnyzo_agency 
+    quote_no: "Generating...", date: todayStr,
+    validity: "30", valid_until: calculateValidUntil(todayStr, "30"), notes: "", terms: tcTemplates.omnyzo_agency
   });
-  
-  const [items, setItems] = useState([
-    { id: Date.now(), type: 'item', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }
+
+  const [items, setItems] = useState<LineItem[]>([
+    { id: 1, type: 'item', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }
   ]);
   const [discount, setDiscount] = useState(0);
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      setIsFetching(true); 
-      
-      const { data: contactData } = await supabase.from("contacts").select("*").eq("contact_type", "Customer");
-      if (contactData) {
-        setContacts(contactData);
-        if (contactData.length > 0) handleClientSelect(contactData[0].name, contactData);
-      }
-      
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      const dateStr = `${yyyy}${mm}${dd}`;
-      const prefix = `QU${dateStr}-`;
+  const handleClientSelect = useCallback((contactId: string, contactList: Contact[]) => {
+    setSelectedContactId(contactId);
 
-      const { data: lastQuote } = await supabase.from("quotations").select("quote_no").like("quote_no", `${prefix}%`).order("created_at", { ascending: false }).limit(1);
-
-      if (lastQuote && lastQuote.length > 0 && lastQuote[0].quote_no) {
-        const lastNum = parseInt(lastQuote[0].quote_no.split('-')[1]);
-        const nextNum = isNaN(lastNum) ? 1 : lastNum + 1;
-        setFormData(p => ({ ...p, quote_no: `${prefix}${nextNum.toString().padStart(3, '0')}` }));
-      } else {
-        setFormData(p => ({ ...p, quote_no: `${prefix}001` }));
-      }
-      
-      setIsFetching(false); 
-    };
-    
-    fetchInitialData();
-  }, []);
-
-  const handleClientSelect = (clientName: string, contactList = contacts) => {
-    const client = contactList.find(c => c.name === clientName);
+    const client = contactList.find(c => c.id === contactId);
     if (client) {
-      setFormData(prev => ({ 
-        ...prev, client_name: clientName, client_pic: client.pic_name || "", client_phone: client.phone || "",
-        client_email: client.email || "", client_address: [client.address, client.postcode, client.city, client.state].filter(Boolean).join(", ") || ""
+      setFormData(prev => ({
+        ...prev, client_name: client.name, client_pic: client.pic_name || "", client_phone: client.phone || "",
+        client_email: client.email || "", client_address: buildContactAddress(client)
       }));
     } else {
-      setFormData(prev => ({ ...prev, client_name: clientName, client_pic: "", client_phone: "", client_email: "", client_address: "" }));
+      setFormData(prev => ({ ...prev, client_name: "", client_pic: "", client_phone: "", client_email: "", client_address: "" }));
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (formData.date && formData.validity) {
-      const d = new Date(formData.date);
-      d.setDate(d.getDate() + parseInt(formData.validity));
-      setFormData(prev => ({ ...prev, valid_until: d.toISOString().split('T')[0] }));
-    }
-  }, [formData.date, formData.validity]);
+    const fetchInitialData = async () => {
+      setIsFetching(true);
 
-  const handleItemChange = (index: number, field: string, value: string | number) => {
+      try {
+        const dateStr = formatDateInputInMalaysia().replaceAll("-", "");
+        const prefix = `QU${dateStr}-`;
+
+        const [contactsResult, lastQuoteResult] = await Promise.all([
+          supabase
+            .from("contacts")
+            .select(CONTACT_SELECT_COLUMNS)
+            .eq("contact_type", "Customer")
+            .order("name", { ascending: true })
+            .order("pic_name", { ascending: true }),
+          supabase
+            .from("quotations")
+            .select("quote_no")
+            .like("quote_no", `${prefix}%`)
+            .order("created_at", { ascending: false })
+            .limit(1),
+        ]);
+
+        if (contactsResult.error) throw contactsResult.error;
+        if (lastQuoteResult.error) throw lastQuoteResult.error;
+
+        if (contactsResult.data) {
+          const typedContacts = contactsResult.data as Contact[];
+          setContacts(typedContacts);
+          if (typedContacts.length > 0) handleClientSelect(typedContacts[0].id, typedContacts);
+        }
+
+        const lastQuote = lastQuoteResult.data;
+        if (lastQuote && lastQuote.length > 0 && lastQuote[0].quote_no) {
+          const lastNum = parseInt(lastQuote[0].quote_no.split('-')[1]);
+          const nextNum = isNaN(lastNum) ? 1 : lastNum + 1;
+          setFormData(p => ({ ...p, quote_no: `${prefix}${nextNum.toString().padStart(3, '0')}` }));
+        } else {
+          setFormData(p => ({ ...p, quote_no: `${prefix}001` }));
+        }
+      } catch (err: unknown) {
+        toast.error(`Unable to load quotation setup: ${getErrorMessage(err)}`);
+      } finally {
+        setIsFetching(false);
+      }
+    };
+
+    fetchInitialData();
+  }, [handleClientSelect]);
+
+  const handleItemChange = (index: number, field: keyof Pick<LineItem, "description" | "qty" | "price" | "taxRate">, value: string | number) => {
     const newItems = [...items];
-    const val = typeof value === 'string' ? value : Number(value);
-    newItems[index] = { ...newItems[index], [field]: val };
-    
+    const val = field === "description" ? String(value) : Number(value);
+    newItems[index] = { ...newItems[index], [field]: val } as LineItem;
+
     if (field === 'qty' || field === 'price') {
       newItems[index].total = Number(newItems[index].qty) * Number(newItems[index].price);
     }
     setItems(newItems);
   };
-  
+
   const addItem = () => setItems([...items, { id: Date.now(), type: 'item', description: "", qty: 1, price: 0, taxRate: 0, total: 0 }]);
   const addTitle = () => setItems([...items, { id: Date.now(), type: 'title', description: "", qty: 0, price: 0, taxRate: 0, total: 0 }]);
-  
+
   // 🔴 LOGIK BARU: Fungsi untuk tambah item dari dropdown Katalog
   const addCatalogItem = (serviceName: string) => {
-    let selectedService: any = null;
+    let selectedService: ServiceCatalogItem | undefined;
     servicesCatalog.forEach(category => {
       const found = category.items.find(item => item.name === serviceName);
       if (found) selectedService = found;
@@ -176,16 +209,16 @@ export default function NewQuotationWizard() {
     if (selectedService) {
       // Jika baris pertama kosong, kita overwrite. Kalau tak, tambah baris baru.
       const firstItemEmpty = items.length === 1 && items[0].description === "" && items[0].price === 0;
-      
-      const newItem = { 
-        id: Date.now(), 
-        type: 'item', 
-        description: selectedService.desc, 
-        qty: 1, 
-        price: selectedService.price, 
-        taxRate: 0, 
-        total: selectedService.price 
-      };
+
+      const newItem = {
+        id: Date.now(),
+        type: 'item',
+        description: selectedService.desc,
+        qty: 1,
+        price: selectedService.price,
+        taxRate: 0,
+        total: selectedService.price
+      } satisfies LineItem;
 
       if (firstItemEmpty) {
         setItems([newItem]);
@@ -208,9 +241,9 @@ export default function NewQuotationWizard() {
   const prevStep = () => setStep(prev => prev - 1);
 
   const handleEnterKey = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { 
-      e.preventDefault(); 
-      addItem(); 
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      addItem();
     }
   };
 
@@ -229,8 +262,8 @@ export default function NewQuotationWizard() {
     const { error } = await supabase.from("quotations").insert([{
       quote_no: formData.quote_no, client_name: formData.client_name, client_pic: formData.client_pic,
       client_address: formData.client_address, client_phone: formData.client_phone, client_email: formData.client_email,
-      date: formData.date, valid_until: formData.valid_until, items: items, subtotal: subtotal, 
-      discount: discount, tax_amount: totalTaxAmount, total: grandTotal, notes: formData.notes, 
+      date: formData.date, valid_until: formData.valid_until, items: items, subtotal: subtotal,
+      discount: discount, tax_amount: totalTaxAmount, total: grandTotal, notes: formData.notes,
       terms: formData.terms, status: "Draft"
     }]);
 
@@ -252,7 +285,7 @@ export default function NewQuotationWizard() {
             <Link href="/quotations" className="text-sm font-medium text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white mb-2 inline-block transition-colors">&larr; Back to Quotations</Link>
             <h1 className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter">New Quotation</h1>
           </div>
-          
+
           {!isFetching && (
             <div className="flex items-center gap-2">
               {[1, 2, 3].map((num) => (
@@ -272,16 +305,16 @@ export default function NewQuotationWizard() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="bg-white/90 dark:bg-[#111111]/90 backdrop-blur-xl p-8 md:p-10 rounded-[32px] shadow-2xl dark:shadow-gray-950/50 border border-gray-200 dark:border-gray-800 transition-colors duration-500">
-            
+
             {step === 1 && (
               <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">Quotation Details</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-500 mb-2">Customer *</label>
-                    <select required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.client_name} onChange={e => handleClientSelect(e.target.value)}>
+                    <select required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={selectedContactId} onChange={e => handleClientSelect(e.target.value, contacts)}>
                       {contacts.length === 0 && <option value="">No customers found.</option>}
-                      {contacts.map((c, i) => <option key={i} value={c.name}>{c.name}</option>)}
+                      {contacts.map((c) => <option key={c.id} value={c.id}>{formatContactOptionLabel(c)}</option>)}
                     </select>
                     {formData.client_name && (
                       <div className="mt-4 p-5 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl animate-in fade-in duration-300">
@@ -296,8 +329,14 @@ export default function NewQuotationWizard() {
                     )}
                   </div>
                   <div><label className="block text-sm font-medium text-gray-500 mb-2">Quote No.</label><input type="text" className={`w-full p-4 border border-transparent rounded-xl cursor-not-allowed font-bold ${formData.quote_no === "Generating..." ? "bg-blue-50 text-blue-500 animate-pulse" : "bg-gray-100 dark:bg-[#151515] text-gray-900 dark:text-white"}`} value={formData.quote_no} readOnly /></div>
-                  <div><label className="block text-sm font-medium text-gray-500 mb-2">Date *</label><input type="date" required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} /></div>
-                  <div><label className="block text-sm font-medium text-gray-500 mb-2">Validity</label><select className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.validity} onChange={e => setFormData({...formData, validity: e.target.value})}><option value="14">14 Days</option><option value="30">30 Days</option><option value="60">60 Days</option></select></div>
+                  <div><label className="block text-sm font-medium text-gray-500 mb-2">Date *</label><input type="date" required className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.date} onChange={e => {
+                    const date = e.target.value;
+                    setFormData({...formData, date, valid_until: calculateValidUntil(date, formData.validity)});
+                  }} /></div>
+                  <div><label className="block text-sm font-medium text-gray-500 mb-2">Validity</label><select className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors appearance-none" value={formData.validity} onChange={e => {
+                    const validity = e.target.value;
+                    setFormData({...formData, validity, valid_until: calculateValidUntil(formData.date, validity)});
+                  }}><option value="14">14 Days</option><option value="30">30 Days</option><option value="60">60 Days</option></select></div>
                   <div><label className="block text-sm font-medium text-gray-500 mb-2">Valid Until</label><input type="date" className="w-full p-4 bg-gray-100 dark:bg-[#151515] border border-transparent rounded-xl text-gray-500 cursor-not-allowed" value={formData.valid_until} readOnly /></div>
                 </div>
               </div>
@@ -307,10 +346,10 @@ export default function NewQuotationWizard() {
               <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 dark:border-gray-800 pb-4 gap-4">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">Items & Pricing</h2>
-                  
+
                   {/* 🔴 LOGIK BARU: Menu Dropdown Katalog Servis */}
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    <select 
+                    <select
                       className="text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-4 py-2.5 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none shadow-sm hover:scale-105 transition-all"
                       value=""
                       onChange={(e) => {
@@ -327,27 +366,27 @@ export default function NewQuotationWizard() {
                         </optgroup>
                       ))}
                     </select>
-                    
+
                     <button type="button" onClick={addTitle} className="text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-4 py-2.5 rounded-full hover:scale-105 transition-transform shadow-sm">+ CUSTOM TITLE</button>
                     <button type="button" onClick={addItem} className="text-xs font-bold bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-4 py-2.5 rounded-full hover:scale-105 transition-transform shadow-sm">+ CUSTOM ITEM</button>
                   </div>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="hidden md:flex gap-4 px-4 text-xs font-bold text-gray-400 uppercase tracking-widest"><div className="flex-1">Description</div><div className="w-16 text-center">Qty</div><div className="w-28 text-right">Price (RM)</div><div className="w-20 text-center">Tax</div><div className="w-28 text-right">Amount</div><div className="w-8"></div></div>
-                  
+
                   {items.map((item, index) => (
                     item.type === 'title' ? (
                       <div key={item.id} className="flex items-start bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-900/30 transition-colors">
                         <div className="flex-1 w-full">
-                          <textarea 
-                            placeholder="Section Title (Use Shift+Enter for new line)" 
-                            required 
+                          <textarea
+                            placeholder="Section Title (Use Shift+Enter for new line)"
+                            required
                             rows={1}
-                            className="w-full bg-transparent border-none text-sm font-bold text-blue-700 dark:text-blue-400 focus:ring-0 p-2 resize-none overflow-hidden" 
-                            value={item.description} 
-                            onChange={(e) => { autoResize(e); handleItemChange(index, 'description', e.target.value); }} 
-                            onKeyDown={handleEnterKey} 
+                            className="w-full bg-transparent border-none text-sm font-bold text-blue-700 dark:text-blue-400 focus:ring-0 p-2 resize-none overflow-hidden"
+                            value={item.description}
+                            onChange={(e) => { autoResize(e); handleItemChange(index, 'description', e.target.value); }}
+                            onKeyDown={handleEnterKey}
                           />
                         </div>
                         <button type="button" onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 w-8 text-center pt-2">&times;</button>
@@ -355,11 +394,11 @@ export default function NewQuotationWizard() {
                     ) : (
                       <div key={item.id} className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-gray-50 dark:bg-[#0A0A0A] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 transition-colors">
                         <div className="flex-1 w-full">
-                          <textarea 
-                            placeholder="- Item description&#10;- Support bullet points (Shift+Enter)" 
-                            required rows={2} 
-                            className="w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none p-3 resize-y" 
-                            value={item.description} 
+                          <textarea
+                            placeholder="- Item description&#10;- Support bullet points (Shift+Enter)"
+                            required rows={2}
+                            className="w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none p-3 resize-y"
+                            value={item.description}
                             onChange={(e) => { autoResize(e); handleItemChange(index, 'description', e.target.value); }}
                             onKeyDown={handleEnterKey}
                           ></textarea>

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
 import ContactAction from "../components/ContactAction";
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import type { Contact } from "../lib/types";
 
 // 🔴 HELPER: Jana Mesh Gradient unik berdasarkan nama (Untuk semua)
 const generateMeshGradient = (name: string) => {
@@ -23,13 +24,13 @@ const generateMeshGradient = (name: string) => {
 };
 
 export default function ContactsDirectory() {
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [selectedBank, setSelectedBank] = useState<any>(null);
+  const [selectedBank, setSelectedBank] = useState<Contact | null>(null);
 
-  const fetchContacts = async () => {
-    setIsLoading(true);
+  const fetchContacts = useCallback(async (showLoader = true) => {
+    if (showLoader) setIsLoading(true);
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
@@ -38,11 +39,14 @@ export default function ContactsDirectory() {
     if (error) console.error("Error fetching contacts:", error);
     else setContacts(data || []);
     setIsLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchContacts();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchContacts(false);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchContacts]);
 
   const customers = contacts.filter(c => c.contact_type === 'Customer');
   const freelancers = contacts.filter(c => c.contact_type === 'Freelancer');
@@ -223,7 +227,7 @@ export default function ContactsDirectory() {
                   <div className="flex items-center justify-between">
                     <p className="text-lg font-black text-blue-600 dark:text-blue-400 tracking-wider font-mono">{selectedBank.bank_account || "Not provided"}</p>
                     {selectedBank.bank_account && (
-                      <button onClick={() => handleCopyBank(selectedBank.bank_account)} className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 active:scale-90 transition-all shadow-sm" title="Copy Account Number">
+                      <button onClick={() => handleCopyBank(selectedBank.bank_account ?? "")} className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 active:scale-90 transition-all shadow-sm" title="Copy Account Number">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                       </button>
                     )}

@@ -2,18 +2,20 @@
 
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export default function LogoutButton() {
+  const router = useRouter();
+
   const handleLogout = async () => {
     const toastId = toast.loading("Logging out...");
     
-    // Matikan session kat Supabase
     const { error } = await supabase.auth.signOut();
     
     if (!error) {
       toast.success("Logged out successfully.", { id: toastId });
-      // HARD REDIRECT UNTUK HALANG "FLASH" NAMA AMIRUN DAN RESET MEMORI BROWSER
-      window.location.href = "/login";
+      router.replace("/login");
+      router.refresh();
     } else {
       toast.error("Error logging out.", { id: toastId });
     }

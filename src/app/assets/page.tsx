@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"; // 🔴 IMPORT TOAST UNTUK NOTIFICATION
+import type { Asset } from "../lib/types";
+import { createStorageFileName, isSuperadminEmail } from "../lib/utils";
 
 export default function AssetsPage() {
   const router = useRouter();
-  const [userEmail, setUserEmail] = useState("");
-  const [assets, setAssets] = useState<any[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -24,18 +25,14 @@ export default function AssetsPage() {
   const [notes, setNotes] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchData = useCallback(async (showLoader = true) => {
+    if (showLoader) setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     const email = session?.user?.email || "";
-    setUserEmail(email);
 
-    if (email && email !== "faiz@omnyzo.com") {
-      router.push("/");
+    if (!isSuperadminEmail(email)) {
+      setIsLoading(false);
+      router.replace("/");
       return;
     }
 
@@ -44,9 +41,17 @@ export default function AssetsPage() {
       .select('*')
       .order('purchase_date', { ascending: false });
 
+    if (error) console.error("Error fetching assets:", error);
     if (data) setAssets(data);
     setIsLoading(false);
-  };
+  }, [router]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void fetchData(false);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchData]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -59,8 +64,7 @@ export default function AssetsPage() {
     if (!e.target.files || e.target.files.length === 0) return;
     
     const file = e.target.files[0];
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const fileName = createStorageFileName(file.name);
     
     setUploadingId(id);
     const toastId = toast.loading("Uploading asset receipt...");
@@ -95,12 +99,11 @@ export default function AssetsPage() {
     setIsSubmitting(true);
     const toastId = toast.loading("Saving new asset...");
 
-    let receiptUrl = null;
+    let receiptUrl: string | null = null;
 
     // Kalau user ada attach gambar resit masa isi form
     if (receiptFile) {
-      const fileExt = receiptFile.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const fileName = createStorageFileName(receiptFile.name);
       const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
       
       if (!uploadError) {

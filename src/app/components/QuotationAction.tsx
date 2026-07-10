@@ -1,17 +1,34 @@
 "use client";
 
 import { supabase } from "../lib/supabase";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import Swal from 'sweetalert2'; 
+import Swal from 'sweetalert2';
+import type { Quotation } from "../lib/types";
+import { addDaysToDateInput, formatDateInputInMalaysia, getErrorMessage } from "../lib/utils";
+import { COMPANY_PROFILE } from "../lib/company";
 
-export default function QuotationAction({ quote }: { quote: any }) {
+type QuotationActionQuote = Pick<Quotation, "id" | "quote_no" | "client_name" | "total" | "status">;
+
+export default function QuotationAction({ quote }: { quote: QuotationActionQuote | null }) {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
 
   if (!quote) return null;
+
+  const fetchQuoteDetails = async () => {
+    const { data, error } = await supabase
+      .from("quotations")
+      .select("*")
+      .eq("id", quote.id)
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error("Quotation details not found.");
+    return data as Quotation;
+  };
 
   const convertToInvoice = async () => {
     if (!window.confirm(`Convert ${quote.quote_no} to an official invoice?`)) return;
@@ -19,8 +36,9 @@ export default function QuotationAction({ quote }: { quote: any }) {
     const loadingToast = toast.loading("Generating premium itemized invoice...");
 
     try {
-      const today = new Date();
-      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      const fullQuote = await fetchQuoteDetails();
+      const todayInput = formatDateInputInMalaysia();
+      const dateStr = todayInput.replaceAll("-", "");
       const prefix = `${dateStr}-SV`;
 
       const { data: lastInvoice } = await supabase.from("invoices").select("invoice_no").like("invoice_no", `${prefix}%`).order("created_at", { ascending: false }).limit(1);
@@ -33,37 +51,34 @@ export default function QuotationAction({ quote }: { quote: any }) {
       }
 
       // Default Credit Term untuk converted invoice = 14 Days
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 14);
-      const formattedDueDate = dueDate.toISOString().split('T')[0];
+      const formattedDueDate = addDaysToDateInput(todayInput, 14);
 
       // 🔴 MAGIK BERLAKU DI SINI: Angkut semua detail masuk Invois!
       const { error: invError } = await supabase.from("invoices").insert([{
-        invoice_no: nextInvNo, 
-        client_name: quote.client_name, 
-        client_pic: quote.client_pic,
-        client_address: quote.client_address,
-        client_phone: quote.client_phone,
-        client_email: quote.client_email,
-        description: `Converted from Quotation ${quote.quote_no}`, 
-        amount: quote.total, 
-        items: quote.items,          // Pindah Items
-        subtotal: quote.subtotal,    // Pindah Subtotal
-        discount: quote.discount,    // Pindah Discount
-        tax_amount: quote.tax_amount,// Pindah Tax
+        invoice_no: nextInvNo,
+        client_name: fullQuote.client_name,
+        client_pic: fullQuote.client_pic,
+        client_address: fullQuote.client_address,
+        client_phone: fullQuote.client_phone,
+        client_email: fullQuote.client_email,
+        description: `Converted from Quotation ${fullQuote.quote_no}`,
+        amount: fullQuote.total,
+        items: fullQuote.items,          // Pindah Items
+        subtotal: fullQuote.subtotal,    // Pindah Subtotal
+        discount: fullQuote.discount,    // Pindah Discount
+        tax_amount: fullQuote.tax_amount,// Pindah Tax
         due_date: formattedDueDate,
         status: "outstanding",
-        terms: "1. Unless specified, Agency Fee is payable within 14 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to billings@omnyzo.com."
+        terms: `1. Unless specified, Agency Fee is payable within 14 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to ${COMPANY_PROFILE.billingEmail}.`
       }]);
 
       if (invError) throw invError;
-      await supabase.from("quotations").update({ status: "Approved" }).eq("id", quote.id);
-      
+      await supabase.from("quotations").update({ status: "Approved" }).eq("id", fullQuote.id);
+
       toast.success(`Success! Itemized Invoice ${nextInvNo} created.`, { id: loadingToast });
-      // Paksa refresh supaya status bertukar serta merta
-      window.location.reload(); 
-    } catch (err: any) {
-      toast.error(`Failed to convert: ${err.message}`, { id: loadingToast });
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error(`Failed to convert: ${getErrorMessage(err)}`, { id: loadingToast });
     } finally {
       setIsProcessing(false);
     }
@@ -75,8 +90,9 @@ export default function QuotationAction({ quote }: { quote: any }) {
     const loadingToast = toast.loading("Duplicating quotation...");
 
     try {
-      const today = new Date();
-      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      const fullQuote = await fetchQuoteDetails();
+      const todayInput = formatDateInputInMalaysia();
+      const dateStr = todayInput.replaceAll("-", "");
       const prefix = `QU${dateStr}-`;
 
       const { data: lastQuote } = await supabase.from("quotations").select("quote_no").like("quote_no", `${prefix}%`).order("created_at", { ascending: false }).limit(1);
@@ -89,20 +105,20 @@ export default function QuotationAction({ quote }: { quote: any }) {
 
       const newQuoteData = {
         quote_no: nextQuoteNo,
-        client_name: quote.client_name,
-        client_pic: quote.client_pic,
-        client_address: quote.client_address,
-        client_phone: quote.client_phone,
-        client_email: quote.client_email,
-        date: new Date().toISOString().split('T')[0],
-        valid_until: quote.valid_until,
-        items: quote.items,
-        subtotal: quote.subtotal,
-        discount: quote.discount,
-        tax_amount: quote.tax_amount,
-        total: quote.total,
-        notes: `Revision of ${quote.quote_no}\n${quote.notes || ''}`,
-        terms: quote.terms,
+        client_name: fullQuote.client_name,
+        client_pic: fullQuote.client_pic,
+        client_address: fullQuote.client_address,
+        client_phone: fullQuote.client_phone,
+        client_email: fullQuote.client_email,
+        date: todayInput,
+        valid_until: fullQuote.valid_until,
+        items: fullQuote.items,
+        subtotal: fullQuote.subtotal,
+        discount: fullQuote.discount,
+        tax_amount: fullQuote.tax_amount,
+        total: fullQuote.total,
+        notes: `Revision of ${fullQuote.quote_no}\n${fullQuote.notes || ''}`,
+        terms: fullQuote.terms,
         status: "Draft"
       };
 
@@ -110,9 +126,9 @@ export default function QuotationAction({ quote }: { quote: any }) {
       if (error) throw error;
 
       toast.success(`Duplicated successfully as ${nextQuoteNo}`, { id: loadingToast });
-      window.location.reload();
-    } catch (err: any) {
-      toast.error(`Error duplicating: ${err.message}`, { id: loadingToast });
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error(`Error duplicating: ${getErrorMessage(err)}`, { id: loadingToast });
     } finally {
       setIsProcessing(false);
     }
@@ -165,10 +181,10 @@ export default function QuotationAction({ quote }: { quote: any }) {
         if (deleteError) throw deleteError;
 
         toast.success("Quotation securely deleted.", { id: loadingToast });
-        window.location.reload();
+        router.refresh();
 
-      } catch (err: any) {
-        toast.error(`System Error: ${err.message}`, { id: loadingToast });
+      } catch (err: unknown) {
+        toast.error(`System Error: ${getErrorMessage(err)}`, { id: loadingToast });
       } finally {
         setIsProcessing(false);
       }
@@ -190,7 +206,7 @@ export default function QuotationAction({ quote }: { quote: any }) {
       <Link href={`/quotation/${quote.id}`} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all active:scale-90" title="View PDF">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
       </Link>
-      
+
       <button onClick={deleteQuote} disabled={isProcessing} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all active:scale-90" title="Delete">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
       </button>
