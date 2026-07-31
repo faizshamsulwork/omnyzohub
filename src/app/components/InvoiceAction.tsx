@@ -44,11 +44,11 @@ export default function InvoiceAction({
 
   // FUNGSI 2: DELETE INVOICE DENGAN PASSWORD & AUDIT LOG
   const deleteInvoice = async () => {
-    const { value: password } = await Swal.fire({
+    const { value: passcode } = await Swal.fire({
       title: 'Security Check',
-      text: `Enter your login password to permanently delete ${invoice.invoice_no}`,
+      text: `Enter the invoice delete passcode to permanently delete ${invoice.invoice_no}`,
       input: 'password',
-      inputPlaceholder: 'Enter your password',
+      inputPlaceholder: 'Enter delete passcode',
       inputAttributes: { autocapitalize: 'off', autocorrect: 'off' },
       icon: 'warning',
       showCancelButton: true,
@@ -59,39 +59,30 @@ export default function InvoiceAction({
       color: '#ffffff',
     });
 
-    if (password) {
+    if (passcode) {
       setIsProcessing(true);
-      const loadingToast = toast.loading("Verifying identity...");
+      const loadingToast = toast.loading("Verifying delete passcode...");
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const userEmail = session?.user?.email;
 
-        if (!userEmail) throw new Error("No active session.");
+        if (!session?.access_token) throw new Error("No active session.");
 
-        // Sahkan password
-        const { error: authError } = await supabase.auth.signInWithPassword({
-          email: userEmail,
-          password: password
+        const response = await fetch(`/api/invoices/${invoice.id}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ passcode }),
         });
 
-        if (authError) {
-          toast.error("Security alert: Incorrect password!", { id: loadingToast });
+        if (!response.ok) {
+          const result = (await response.json().catch(() => null)) as { error?: string } | null;
+          toast.error(result?.error || "Security alert: Incorrect delete passcode!", { id: loadingToast });
           setIsProcessing(false);
           return;
         }
-
-        // Masukkan rekod ke dalam Jadual Log Audit
-        await supabase.from("audit_logs").insert([{
-          action: "DELETE_INVOICE",
-          details: `Deleted ${invoice.invoice_no} (Client: ${invoice.client_name}, Total: RM${invoice.amount})`,
-          performed_by: userEmail
-        }]);
-
-        // Padam Invoice
-        const { error: deleteError } = await supabase.from("invoices").delete().eq("id", invoice.id);
-
-        if (deleteError) throw deleteError;
 
         toast.success("Invoice securely deleted.", { id: loadingToast });
         onChanged?.();
@@ -105,7 +96,7 @@ export default function InvoiceAction({
   };
 
   return (
-    <div className="flex items-center justify-end gap-3">
+    <div className="flex items-center justify-end gap-2 md:gap-3">
 
       {/* Butang Toggle Status */}
       <button
@@ -127,6 +118,16 @@ export default function InvoiceAction({
         title="View PDF"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+      </Link>
+
+      {/* Butang Edit Invoice */}
+      <Link
+        href={`/invoices/${invoice.id}/edit`}
+        className="p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-all active:scale-90 disabled:opacity-50"
+        title="Edit invoice"
+        aria-label="Edit invoice"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 14v4.75A2.25 2.25 0 0115.75 21h-10.5A2.25 2.25 0 013 18.75v-10.5A2.25 2.25 0 015.25 6H10" /></svg>
       </Link>
 
       {/* Butang Delete */}

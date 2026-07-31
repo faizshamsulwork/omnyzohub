@@ -53,26 +53,49 @@ export default function QuotationAction({ quote }: { quote: QuotationActionQuote
       // Default Credit Term untuk converted invoice = 14 Days
       const formattedDueDate = addDaysToDateInput(todayInput, 14);
 
-      // 🔴 MAGIK BERLAKU DI SINI: Angkut semua detail masuk Invois!
-      const { error: invError } = await supabase.from("invoices").insert([{
-        invoice_no: nextInvNo,
-        client_name: fullQuote.client_name,
-        client_pic: fullQuote.client_pic,
-        client_address: fullQuote.client_address,
-        client_phone: fullQuote.client_phone,
-        client_email: fullQuote.client_email,
-        description: `Converted from Quotation ${fullQuote.quote_no}`,
-        amount: fullQuote.total,
-        items: fullQuote.items,          // Pindah Items
-        subtotal: fullQuote.subtotal,    // Pindah Subtotal
-        discount: fullQuote.discount,    // Pindah Discount
-        tax_amount: fullQuote.tax_amount,// Pindah Tax
-        due_date: formattedDueDate,
-        status: "outstanding",
-        terms: `1. Unless specified, Agency Fee is payable within 14 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to ${COMPANY_PROFILE.billingEmail}.`
-      }]);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("No active session.");
 
-      if (invError) throw invError;
+      const invoiceItems = Array.isArray(fullQuote.items) && fullQuote.items.length > 0
+        ? fullQuote.items
+        : [{
+          id: Date.now(),
+          type: "item",
+          description: `Converted from Quotation ${fullQuote.quote_no}`,
+          qty: 1,
+          price: Number(fullQuote.total) || 0,
+          taxRate: 0,
+          total: Number(fullQuote.total) || 0,
+        }];
+
+      const response = await fetch("/api/invoices", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          invoiceNumber: nextInvNo,
+          invoiceDate: todayInput,
+          dueDate: formattedDueDate,
+          clientName: fullQuote.client_name,
+          clientPic: fullQuote.client_pic,
+          clientAddress: fullQuote.client_address,
+          clientPhone: fullQuote.client_phone,
+          clientEmail: fullQuote.client_email,
+          description: `Converted from Quotation ${fullQuote.quote_no}`,
+          items: invoiceItems,
+          discount: fullQuote.discount,
+          status: "outstanding",
+          terms: `1. Unless specified, Agency Fee is payable within 14 days from invoice date.\n2. The Agency reserves the right to suspend any Services in the event of delay in payment.\n3. Please indicate the invoice number as reference when transferring the funds.\n4. Payment advice should be sent to ${COMPANY_PROFILE.billingEmail}.`,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(result?.error || "Unable to create invoice.");
+      }
+
       await supabase.from("quotations").update({ status: "Approved" }).eq("id", fullQuote.id);
 
       toast.success(`Success! Itemized Invoice ${nextInvNo} created.`, { id: loadingToast });

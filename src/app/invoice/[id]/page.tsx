@@ -8,7 +8,7 @@ import Link from "next/link";
 import PrintButton from "../../components/PrintButton";
 import { COMPANY_PROFILE } from "../../lib/company";
 import type { Contact, Invoice, LineItem } from "../../lib/types";
-import { isPaidStatus } from "../../lib/utils";
+import { formatCurrency, formatDateOnly, getDateOnlyFromStorage, isPaidStatus } from "../../lib/utils";
 
 export default function InvoiceViewer({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -74,15 +74,22 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
     client?.ssm_no ? `Registration No: ${client.ssm_no}` : null,
     client?.sst_no ? `SST No: ${client.sst_no}` : null,
   ].filter(Boolean);
-  const formatMachineDate = (value?: string | null) => value?.split("T")[0] || "";
+  const issueDateOnly = getDateOnlyFromStorage(invoice.created_at);
+  const dueDateOnly = getDateOnlyFromStorage(invoice.due_date);
+  const formatMachineDate = (value?: string | null) => getDateOnlyFromStorage(value);
   const formatMachineMoney = (value: number | string | null | undefined) => (Number(value) || 0).toFixed(2);
+  const getLineSubtotal = (item: LineItem) => Number(item.total) || (Number(item.qty) || 0) * (Number(item.price) || 0);
+  const getLineAmountWithTax = (item: LineItem) => {
+    const lineSubtotal = getLineSubtotal(item);
+    return lineSubtotal + (lineSubtotal * ((Number(item.taxRate) || 0) / 100));
+  };
   const machineReadableItems =
     invoice.items && invoice.items.length > 0
       ? invoice.items
           .filter((item) => item.type === "item")
           .map(
             (item, index) =>
-              `Line ${index + 1}: Description=${item.description}; Quantity=${item.qty}; UnitPrice=${formatMachineMoney(item.price)}; TaxRate=${item.taxRate || 0}; LineTotal=${formatMachineMoney(item.total)}`
+              `Line ${index + 1}: Description=${item.description}; Quantity=${item.qty}; UnitPrice=${formatMachineMoney(item.price)}; TaxRate=${item.taxRate || 0}; LineTotal=${formatMachineMoney(getLineAmountWithTax(item))}`
           )
       : [
           `Line 1: Description=${invoice.description || "Creative Services"}; Quantity=1; UnitPrice=${formatMachineMoney(invoice.amount)}; TaxRate=0; LineTotal=${formatMachineMoney(invoice.amount)}`,
@@ -90,8 +97,8 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
   const machineReadableText = [
     `Document Type: ${isReceiptMode ? "Official Receipt" : "Invoice"}`,
     `Document Number: ${invoice.invoice_no}`,
-    `Issue Date: ${formatMachineDate(invoice.created_at)}`,
-    invoice.due_date && !isReceiptMode ? `Due Date: ${formatMachineDate(invoice.due_date)}` : null,
+    `Issue Date: ${formatMachineDate(issueDateOnly)}`,
+    dueDateOnly && !isReceiptMode ? `Due Date: ${formatMachineDate(dueDateOnly)}` : null,
     `Status: ${invoice.status}`,
     `Currency: ${COMPANY_PROFILE.currencyCode}`,
     `Supplier Name: ${COMPANY_PROFILE.legalName}`,
@@ -156,6 +163,16 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
             </button>
           )}
 
+          <Link
+            href={`/invoices/${invoice.id}/edit`}
+            className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 dark:bg-[#111111] dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-900"
+            title="Edit invoice"
+            aria-label="Edit invoice"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 14v4.75A2.25 2.25 0 0115.75 21h-10.5A2.25 2.25 0 013 18.75v-10.5A2.25 2.25 0 015.25 6H10" /></svg>
+            Edit
+          </Link>
+
           <PrintButton
             documentName={documentTitle}
             targetId="invoice-document"
@@ -205,15 +222,15 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
                       </tr>
                       <tr>
                         <td className="py-1 font-bold text-right pr-4 uppercase tracking-wider">Date:</td>
-                        <td className="py-1 text-right">{new Date(invoice.created_at).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                        <td className="py-1 text-right">{formatDateOnly(issueDateOnly)}</td>
                       </tr>
                       <tr>
                         <td className="py-1 font-bold text-right pr-4 uppercase tracking-wider">Currency:</td>
                         <td className="py-1 text-right font-bold text-[#000000]">{COMPANY_PROFILE.currencyCode}</td>
                       </tr>
                       {/* JANGAN TUNJUK DUE DATE KALAU INI ADALAH RESIT */}
-                      {invoice.due_date && !isReceiptMode && (
-                        <tr><td className="py-1 font-bold text-right pr-4 uppercase tracking-wider text-[#EF4444]">Due Date:</td><td className="py-1 text-right font-bold text-[#EF4444]">{new Date(invoice.due_date).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' })}</td></tr>
+                      {dueDateOnly && !isReceiptMode && (
+                        <tr><td className="py-1 font-bold text-right pr-4 uppercase tracking-wider text-[#EF4444]">Due Date:</td><td className="py-1 text-right font-bold text-[#EF4444]">{formatDateOnly(dueDateOnly)}</td></tr>
                       )}
                       <tr>
                         <td className="py-1 font-bold text-right pr-4 uppercase tracking-wider">Status:</td>
@@ -258,9 +275,9 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
                       <tr className="border-b border-[#E5E7EB] avoid-break">
                         <td className="py-5 px-2 text-[12px] font-medium leading-relaxed whitespace-pre-wrap text-[#000000]">{invoice.description}</td>
                         <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">1</td>
-                        <td className="py-5 px-2 text-[12px] text-right font-medium text-[#374151] align-top">{Number(invoice.amount).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
+                        <td className="py-5 px-2 text-[12px] text-right font-medium text-[#374151] align-top">{formatCurrency(invoice.amount)}</td>
                         <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">-</td>
-                        <td className="py-5 px-2 text-[12px] text-right font-bold text-[#000000] align-top">{Number(invoice.amount).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
+                        <td className="py-5 px-2 text-[12px] text-right font-bold text-[#000000] align-top">{formatCurrency(invoice.amount)}</td>
                       </tr>
                     ) : (
                       invoice.items.map((item: LineItem, idx: number) => (
@@ -274,9 +291,9 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
                           <tr key={idx} className="border-b border-[#E5E7EB] avoid-break">
                             <td className="py-5 px-2 text-[12px] font-medium leading-relaxed whitespace-pre-wrap text-[#000000]">{item.description}</td>
                             <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">{item.qty}</td>
-                            <td className="py-5 px-2 text-[12px] text-right font-medium text-[#374151] align-top">{Number(item.price).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
+                            <td className="py-5 px-2 text-[12px] text-right font-medium text-[#374151] align-top">{formatCurrency(item.price)}</td>
                             <td className="py-5 px-2 text-[12px] text-center font-medium text-[#374151] align-top">{item.taxRate ? `${item.taxRate}%` : '-'}</td>
-                            <td className="py-5 px-2 text-[12px] text-right font-bold text-[#000000] align-top">{Number(item.total).toLocaleString('en-MY', {minimumFractionDigits:2})}</td>
+                            <td className="py-5 px-2 text-[12px] text-right font-bold text-[#000000] align-top">{formatCurrency(getLineAmountWithTax(item))}</td>
                           </tr>
                         )
                       ))
@@ -290,18 +307,18 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
                 <div className="w-[70%] md:w-[45%]">
                   <div className="flex justify-between py-2 border-b border-[#F3F4F6] text-[12px]">
                     <span className="text-[#374151] font-bold uppercase tracking-wider">Subtotal</span>
-                    <span className="font-bold text-[#000000]">{Number(invoice.subtotal || invoice.amount).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                    <span className="font-bold text-[#000000]">{formatCurrency(invoice.subtotal || invoice.amount)}</span>
                   </div>
                   {Number(invoice.discount) > 0 && (
                     <div className="flex justify-between py-2 border-b border-[#F3F4F6] text-[12px]">
                       <span className="text-[#374151] font-bold uppercase tracking-wider">Discount</span>
-                      <span className="font-bold text-[#EF4444]">- {Number(invoice.discount).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                      <span className="font-bold text-[#EF4444]">{formatCurrency(-(Number(invoice.discount) || 0))}</span>
                     </div>
                   )}
-                  {Number(invoice.tax_amount) > 0 && (
+                  {Number(invoice.tax_amount) !== 0 && (
                     <div className="flex justify-between py-2 border-b border-[#F3F4F6] text-[12px]">
                       <span className="text-[#374151] font-bold uppercase tracking-wider">Tax</span>
-                      <span className="font-bold text-[#000000]">{Number(invoice.tax_amount).toLocaleString('en-MY', {minimumFractionDigits:2})}</span>
+                      <span className="font-bold text-[#000000]">{formatCurrency(invoice.tax_amount)}</span>
                     </div>
                   )}
 
@@ -311,7 +328,7 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
                       {isReceiptMode ? "Total Paid" : "Total Due"}
                     </span>
                     <span className={`text-[18px] font-black ${isReceiptMode ? 'text-green-700' : 'text-[#000000]'}`}>
-                      RM {Number(invoice.amount).toLocaleString('en-MY', {minimumFractionDigits:2})}
+                      {formatCurrency(invoice.amount)}
                     </span>
                   </div>
                 </div>

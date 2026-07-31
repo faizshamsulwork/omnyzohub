@@ -97,10 +97,20 @@ export default function MobileNav() {
           </Link>
           
           {isSuperadmin && (
-            <Link href="/assets" onClick={() => setShowMenu(false)} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors active:scale-95">
-              <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 flex items-center justify-center"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg></div>
-              <span className="font-bold text-gray-700 dark:text-gray-200">Company Assets</span>
-            </Link>
+            <>
+              <Link href="/expense-planner" onClick={() => setShowMenu(false)} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors active:scale-95">
+                <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 flex items-center justify-center"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-6a2 2 0 012-2h8M9 17H7a2 2 0 01-2-2V7a2 2 0 012-2h5m-3 12h10a2 2 0 002-2v-4m-7-7h5m0 0v5m0-5l-7 7" /></svg></div>
+                <span className="font-bold text-gray-700 dark:text-gray-200">Expense Planner</span>
+              </Link>
+              <Link href="/zakat" onClick={() => setShowMenu(false)} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors active:scale-95">
+                <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-2.761 0-5 1.343-5 3s2.239 3 5 3 5-1.343 5-3-2.239-3-5-3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 11v3c0 1.657 2.239 3 5 3s5-1.343 5-3v-3M5 19h14M12 4v2" /></svg></div>
+                <span className="font-bold text-gray-700 dark:text-gray-200">Zakat Calculator</span>
+              </Link>
+              <Link href="/assets" onClick={() => setShowMenu(false)} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors active:scale-95">
+                <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 flex items-center justify-center"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg></div>
+                <span className="font-bold text-gray-700 dark:text-gray-200">Company Assets</span>
+              </Link>
+            </>
           )}
         </div>
 

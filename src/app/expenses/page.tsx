@@ -284,14 +284,30 @@ export default function ExpensesPage() {
             <h1 className="text-4xl font-semibold tracking-tight">Expenses</h1>
             <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">Track cashflow and manage dual-documents for tax.</p>
           </div>
-          <button
-            onClick={exportToCSV}
-            disabled={filteredExpenses.length === 0}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-green-600 px-6 text-sm font-bold text-white shadow-lg shadow-green-500/30 transition-all hover:bg-green-700 active:scale-95 disabled:opacity-50"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            Export Tax Ledger (CSV)
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/expense-planner"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-amber-600 px-6 text-sm font-bold text-white shadow-lg shadow-amber-500/30 transition-all hover:bg-amber-700 active:scale-95"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-6a2 2 0 012-2h8M9 17H7a2 2 0 01-2-2V7a2 2 0 012-2h5m-3 12h10a2 2 0 002-2v-4m-7-7h5m0 0v5m0-5l-7 7" /></svg>
+              Plan Expenses
+            </Link>
+            <Link
+              href="/new-expense"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-500/30 transition-all hover:bg-blue-700 active:scale-95"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              Record Expense
+            </Link>
+            <button
+              onClick={exportToCSV}
+              disabled={filteredExpenses.length === 0}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-green-600 px-6 text-sm font-bold text-white shadow-lg shadow-green-500/30 transition-all hover:bg-green-700 active:scale-95 disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Export CSV
+            </button>
+          </div>
         </header>
 
         <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">

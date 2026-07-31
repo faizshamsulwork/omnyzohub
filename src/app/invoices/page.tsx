@@ -7,7 +7,10 @@ import InvoiceAction from "../components/InvoiceAction";
 import { toast } from "sonner";
 import type { Invoice } from "../lib/types";
 import {
+  formatCurrency,
+  formatDateOnly,
   formatMonthLabel,
+  getDateOnlyFromStorage,
   getCurrentMonthKeyInMalaysia,
   getInvoiceOutstandingBalance,
   getMonthKey,
@@ -149,7 +152,7 @@ export default function InvoicesPage() {
 
     // Susun isi data
     const rows = filteredInvoices.map(inv => {
-      const date = new Date(inv.created_at).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
+      const date = getDateOnlyFromStorage(inv.created_at);
       const total = Number(inv.amount) || 0;
       const paid = Number(inv.amount_paid) || 0;
       const balance = getInvoiceOutstandingBalance({
@@ -290,11 +293,11 @@ export default function InvoicesPage() {
 	                    <div className="grid grid-cols-2 gap-6 md:justify-self-end text-right">
 	                      <div className="min-w-0">
 	                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Total</p>
-	                        <p className="text-sm md:text-base font-black text-gray-900 dark:text-white tabular-nums whitespace-nowrap">RM {monthTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+	                        <p className="text-sm md:text-base font-black text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{formatCurrency(monthTotal)}</p>
 	                      </div>
 	                      <div className="min-w-0">
 	                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Outstanding</p>
-	                        <p className="text-sm md:text-base font-black text-orange-500 tabular-nums whitespace-nowrap">RM {monthOutstanding.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+	                        <p className="text-sm md:text-base font-black text-orange-500 tabular-nums whitespace-nowrap">{formatCurrency(monthOutstanding)}</p>
 	                      </div>
 	                    </div>
 	                  </div>
@@ -327,17 +330,17 @@ export default function InvoicesPage() {
 	                            </td>
 
 	                            <td className="px-6 py-5 hidden md:table-cell text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
-	                              {new Date(inv.created_at).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+	                              {formatDateOnly(inv.created_at)}
 	                            </td>
 
 	                            <td className="px-6 py-5 text-right">
 	                              <div className="font-black text-gray-900 dark:text-white tabular-nums whitespace-nowrap">
-	                                RM {Number(inv.amount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+	                                {formatCurrency(inv.amount)}
 	                              </div>
 	                              {Number(inv.amount_paid) > 0 && getInvoiceOutstandingBalance({ amount: inv.amount, amountPaid: inv.amount_paid, status: inv.status }) > 0 && (
                                 <div className="flex flex-col items-end mt-1">
-                                  <span className="text-[10px] text-gray-500 font-medium">Paid: RM {Number(inv.amount_paid).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
-                                  <span className="text-[10px] text-orange-500 font-bold">Bal: RM {getInvoiceOutstandingBalance({ amount: inv.amount, amountPaid: inv.amount_paid, status: inv.status }).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                                  <span className="text-[10px] text-gray-500 font-medium">Paid: {formatCurrency(inv.amount_paid)}</span>
+                                  <span className="text-[10px] text-orange-500 font-bold">Bal: {formatCurrency(getInvoiceOutstandingBalance({ amount: inv.amount, amountPaid: inv.amount_paid, status: inv.status }))}</span>
                                 </div>
                               )}
                             </td>
@@ -398,21 +401,21 @@ export default function InvoicesPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-500">Total Due:</span>
-                    <span className="font-bold text-gray-900 dark:text-white">RM {Number(partialModal.invoice?.amount).toLocaleString('en-MY', {minimumFractionDigits: 2})}</span>
+                    <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(partialModal.invoice?.amount)}</span>
                   </div>
                   {Number(partialModal.invoice?.amount_paid) > 0 && (
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500">Paid So Far:</span>
-                      <span className="font-bold text-green-600 dark:text-green-400">RM {Number(partialModal.invoice?.amount_paid).toLocaleString('en-MY', {minimumFractionDigits: 2})}</span>
+                      <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(partialModal.invoice?.amount_paid)}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center text-sm pt-3 border-t border-gray-200 dark:border-gray-700">
                     <span className="text-gray-500 font-bold uppercase tracking-widest text-[10px]">Current Balance</span>
-                    <span className="font-black text-orange-500 text-lg">RM {getInvoiceOutstandingBalance({
+                    <span className="font-black text-orange-500 text-lg">{formatCurrency(getInvoiceOutstandingBalance({
                       amount: partialModal.invoice?.amount,
                       amountPaid: partialModal.invoice?.amount_paid,
                       status: partialModal.invoice?.status,
-                    }).toLocaleString('en-MY', {minimumFractionDigits: 2})}</span>
+                    }))}</span>
                   </div>
                 </div>
               </div>

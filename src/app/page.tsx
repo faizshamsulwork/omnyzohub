@@ -368,7 +368,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className={`grid grid-cols-2 ${isSuperadmin ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-2'} gap-4`}>
+        <div className={`grid grid-cols-2 ${isSuperadmin ? 'md:grid-cols-3 lg:grid-cols-6' : 'md:grid-cols-2'} gap-4`}>
           <Link href="/new-invoice" className="bg-white/80 dark:bg-[#111111]/80 p-6 rounded-[24px] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3">
             <div className="w-12 h-12 bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-full flex items-center justify-center"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg></div>
             <span className="text-sm font-bold text-center">New Invoice</span>
@@ -387,6 +387,10 @@ export default function Dashboard() {
               <Link href="/expenses" className="bg-white/80 dark:bg-[#111111]/80 p-6 rounded-[24px] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3">
                 <div className="w-12 h-12 bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded-full flex items-center justify-center"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg></div>
                 <span className="text-sm font-bold text-center">Tax Ledger</span>
+              </Link>
+              <Link href="/zakat" className="bg-white/80 dark:bg-[#111111]/80 p-6 rounded-[24px] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full flex items-center justify-center"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-2.761 0-5 1.343-5 3s2.239 3 5 3 5-1.343 5-3-2.239-3-5-3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 11v3c0 1.657 2.239 3 5 3s5-1.343 5-3v-3M5 19h14M12 4v2" /></svg></div>
+                <span className="text-sm font-bold text-center">Zakat</span>
               </Link>
               <Link href="/assets" className="bg-white/80 dark:bg-[#111111]/80 p-6 rounded-[24px] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center gap-3">
                 <div className="w-12 h-12 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 rounded-full flex items-center justify-center"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg></div>

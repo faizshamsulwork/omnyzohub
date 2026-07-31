@@ -43,6 +43,16 @@ export function toMoney(value: MoneyValue) {
   });
 }
 
+export function formatCurrency(value: MoneyValue, currency = "RM") {
+  const amount = toNumber(value);
+  const prefix = amount < 0 ? "-" : "";
+
+  return `${prefix}${currency} ${Math.abs(amount).toLocaleString("en-MY", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export function normalizeStatus(status?: string | null) {
   return (status || "").trim().toLowerCase();
 }
@@ -83,6 +93,69 @@ export function formatContactOptionLabel(contact: Contact) {
   return secondary ? `${contact.name} - ${secondary}` : contact.name;
 }
 
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const SHORT_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const LONG_MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+export type DateOnlyParts = {
+  year: number;
+  month: number;
+  day: number;
+  value: string;
+};
+
+export function isLeapYear(year: number) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+export function getDaysInMonth(year: number, month: number) {
+  if (month === 2) return isLeapYear(year) ? 29 : 28;
+  if ([4, 6, 9, 11].includes(month)) return 30;
+  if (month >= 1 && month <= 12) return 31;
+  return 0;
+}
+
+export function parseDateOnlyParts(value?: string | null): DateOnlyParts | null {
+  const match = (value || "").trim().match(DATE_ONLY_PATTERN);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const daysInMonth = getDaysInMonth(year, month);
+
+  if (!Number.isInteger(year) || year < 1 || !daysInMonth || day < 1 || day > daysInMonth) {
+    return null;
+  }
+
+  return {
+    year,
+    month,
+    day,
+    value: `${match[1]}-${match[2]}-${match[3]}`,
+  };
+}
+
+export function isValidDateOnly(value?: string | null) {
+  return Boolean(parseDateOnlyParts(value));
+}
+
+export function getDateOnlyFromStorage(value?: string | null) {
+  const rawValue = (value || "").trim();
+  if (isValidDateOnly(rawValue)) return rawValue;
+
+  const possiblePrefix = rawValue.slice(0, 10);
+  return isValidDateOnly(possiblePrefix) ? possiblePrefix : "";
+}
+
+export function formatDateOnly(value?: string | null, options: { month?: "short" | "long" } = {}) {
+  const parts = parseDateOnlyParts(getDateOnlyFromStorage(value));
+  if (!parts) return "";
+
+  const labels = options.month === "long" ? LONG_MONTH_LABELS : SHORT_MONTH_LABELS;
+  return `${String(parts.day).padStart(2, "0")} ${labels[parts.month - 1]} ${parts.year}`;
+}
+
 export function formatDateInputInMalaysia(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: MALAYSIA_TIME_ZONE,
@@ -95,20 +168,15 @@ export function formatDateInputInMalaysia(date = new Date()) {
   const month = parts.find((part) => part.type === "month")?.value;
   const day = parts.find((part) => part.type === "day")?.value;
 
-  if (!year || !month || !day) return date.toISOString().split("T")[0];
+  if (!year || !month || !day) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
   return `${year}-${month}-${day}`;
 }
 
 export function getMonthKey(dateInput?: string | null) {
-  if (!dateInput) return "unknown";
-
-  const directMonth = dateInput.match(/^(\d{4})-(\d{2})/);
-  if (directMonth) return `${directMonth[1]}-${directMonth[2]}`;
-
-  const parsedDate = new Date(dateInput);
-  if (Number.isNaN(parsedDate.getTime())) return "unknown";
-
-  return formatDateInputInMalaysia(parsedDate).slice(0, 7);
+  const dateOnly = getDateOnlyFromStorage(dateInput);
+  return dateOnly ? dateOnly.slice(0, 7) : "unknown";
 }
 
 export function getCurrentMonthKeyInMalaysia() {
@@ -119,18 +187,17 @@ export function getPreviousMonthKey(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) return getCurrentMonthKeyInMalaysia();
 
-  const date = new Date(Date.UTC(year, month - 2, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  const previousMonth = month === 1 ? 12 : month - 1;
+  const previousYear = month === 1 ? year - 1 : year;
+
+  return `${previousYear}-${String(previousMonth).padStart(2, "0")}`;
 }
 
 export function formatMonthLabel(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  if (!year || !month) return "Undated";
+  if (!year || month < 1 || month > 12) return "Undated";
 
-  return new Intl.DateTimeFormat("en-MY", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
+  return `${LONG_MONTH_LABELS[month - 1]} ${year}`;
 }
 
 export function sortMonthKeysDescending(a: string, b: string) {
@@ -140,10 +207,41 @@ export function sortMonthKeysDescending(a: string, b: string) {
 }
 
 export function addDaysToDateInput(dateInput: string, days: number) {
-  const [year, month, day] = dateInput.split("-").map(Number);
-  const date = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().split("T")[0];
+  const parts = parseDateOnlyParts(dateInput);
+  if (!parts || !Number.isFinite(days)) return dateInput;
+
+  let year = parts.year;
+  let month = parts.month;
+  let day = parts.day;
+  let remainingDays = Math.trunc(days);
+
+  while (remainingDays > 0) {
+    day += 1;
+    if (day > getDaysInMonth(year, month)) {
+      day = 1;
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+    remainingDays -= 1;
+  }
+
+  while (remainingDays < 0) {
+    day -= 1;
+    if (day < 1) {
+      month -= 1;
+      if (month < 1) {
+        month = 12;
+        year -= 1;
+      }
+      day = getDaysInMonth(year, month);
+    }
+    remainingDays += 1;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 export function getErrorMessage(error: unknown) {
