@@ -273,8 +273,8 @@ export default function InvoicesPage() {
             <p className="text-gray-400 text-xs mt-2">{selectedPeriodLabel}</p>
           </div>
         ) : (
-          <div className="bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800 rounded-[32px] overflow-hidden shadow-lg">
-            {invoiceMonthKeys.map((monthKey, index) => {
+          <div className="space-y-6">
+            {invoiceMonthKeys.map((monthKey) => {
               const monthInvoices = invoiceGroups[monthKey];
               const monthTotal = monthInvoices.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
               const monthOutstanding = monthInvoices.reduce((sum, inv) => {
@@ -286,11 +286,11 @@ export default function InvoicesPage() {
               }, 0);
 
               return (
-                <section key={monthKey} className={index > 0 ? "border-t border-gray-200 dark:border-gray-800" : ""}>
-	                  <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_340px] items-center gap-5 px-6 py-5 bg-gray-50/60 dark:bg-black/20">
+                <section key={monthKey} className="bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800 rounded-[32px] overflow-hidden shadow-lg">
+	                  <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_340px] items-center gap-5 px-6 py-5 bg-blue-50/80 dark:bg-blue-950/20 border-b border-blue-100 dark:border-blue-900/40">
 	                    <div>
-	                      <h2 className="text-lg font-black text-gray-900 dark:text-white">{formatMonthLabel(monthKey)}</h2>
-	                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400">{monthInvoices.length} invoices</p>
+	                      <h2 className="text-lg font-black text-blue-700 dark:text-blue-400">{formatMonthLabel(monthKey)}</h2>
+	                      <p className="text-xs font-bold uppercase tracking-widest text-blue-700/60 dark:text-blue-400/60">{monthInvoices.length} invoices</p>
 	                    </div>
 	                    <div className="grid grid-cols-2 gap-6 md:justify-self-end text-right">
 	                      <div className="min-w-0">
