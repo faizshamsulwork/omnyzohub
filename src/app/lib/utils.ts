@@ -193,6 +193,21 @@ export function getPreviousMonthKey(monthKey: string) {
   return `${previousYear}-${String(previousMonth).padStart(2, "0")}`;
 }
 
+export function getMonthKeyMonthsAgo(monthsBack: number) {
+  const current = getCurrentMonthKeyInMalaysia();
+  let key = current;
+  for (let i = 0; i < monthsBack; i += 1) {
+    key = getPreviousMonthKey(key);
+  }
+  return key;
+}
+
+export function monthKeyToDateInput(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  if (!year || month < 1 || month > 12) return null;
+  return `${year}-${String(month).padStart(2, "0")}-01`;
+}
+
 export function formatMonthLabel(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || month < 1 || month > 12) return "Undated";

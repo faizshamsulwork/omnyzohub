@@ -88,13 +88,13 @@ export default function QuickAddMenu() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-[2px] z-[90] print:hidden"
+            className="fixed inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-[2px] z-[90] print:hidden md:hidden"
             onClick={() => setIsOpen(false)}
           />
         )}
       </AnimatePresence>
 
-      <div ref={menuRef} className="fixed bottom-24 right-4 md:bottom-8 md:right-8 z-[100] print:hidden">
+      <div ref={menuRef} className="fixed bottom-24 right-4 z-[100] print:hidden md:hidden">
         <AnimatePresence>
           {isOpen && (
             <motion.div

@@ -13,16 +13,21 @@ import {
   getCurrentMonthKeyInMalaysia,
   getErrorMessage,
   getMonthKey,
+  getMonthKeyMonthsAgo,
   getPaymentVoucherPrefix,
   getPreviousMonthKey,
   isPaidStatus,
   isSuperadminEmail,
+  monthKeyToDateInput,
   parseExpenseDescription,
   sortMonthKeysDescending,
 } from "../lib/utils";
 import { useRouter } from "next/navigation";
 
 type MonthFilter = "current" | "previous" | "all" | "custom";
+
+// Same egress-safety window as the invoices list — see its DEFAULT_HISTORY_MONTHS comment.
+const DEFAULT_HISTORY_MONTHS = 6;
 
 export default function ExpensesPage() {
   const router = useRouter();
@@ -32,13 +37,15 @@ export default function ExpensesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState<MonthFilter>("all");
   const [customMonth, setCustomMonth] = useState(getCurrentMonthKeyInMalaysia());
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [payeeModal, setPayeeModal] = useState<{ expense: Expense; mode: "generate" | "update" } | null>(null);
   const [selectedPayeeId, setSelectedPayeeId] = useState("");
   const [manualPayeeName, setManualPayeeName] = useState("");
-  
+
   const [uploadingState, setUploadingState] = useState<{ id: string, type: 'receipt' | 'proof' } | null>(null);
 
-  const fetchExpenses = useCallback(async (showLoader = true) => {
+  const fetchExpenses = useCallback(async (showLoader = true, loadAll = showAllHistory) => {
     if (showLoader) setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -48,25 +55,48 @@ export default function ExpensesPage() {
       return;
     }
 
-    const [expenseResult, freelancerResult] = await Promise.all([
-      supabase
-        .from('expenses')
-        .select('*')
-        .order('date', { ascending: false }),
-      supabase
-        .from('contacts')
-        .select('*')
-        .eq('contact_type', 'Freelancer')
-        .order('name', { ascending: true }),
+    const freelancerPromise = supabase
+      .from('contacts')
+      .select('*')
+      .eq('contact_type', 'Freelancer')
+      .order('name', { ascending: true });
+
+    if (loadAll) {
+      const [expenseResult, freelancerResult] = await Promise.all([
+        supabase.from('expenses').select('*').order('date', { ascending: false }),
+        freelancerPromise,
+      ]);
+      if (expenseResult.error) console.error("Error fetching expenses:", expenseResult.error);
+      if (expenseResult.data) setExpenses(expenseResult.data);
+      if (freelancerResult.error) console.error("Error fetching payees:", freelancerResult.error);
+      if (freelancerResult.data) setFreelancers(freelancerResult.data as Contact[]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Default view: recent expenses regardless of status, PLUS any
+    // not-yet-paid expense regardless of age (an unpaid voucher from months
+    // ago is still owed -- only fully-paid history gets cut off by default).
+    const cutoff = monthKeyToDateInput(getMonthKeyMonthsAgo(DEFAULT_HISTORY_MONTHS));
+    const [recentResult, unpaidResult, freelancerResult] = await Promise.all([
+      cutoff
+        ? supabase.from('expenses').select('*').gte('date', cutoff).order('date', { ascending: false })
+        : supabase.from('expenses').select('*').order('date', { ascending: false }),
+      supabase.from('expenses').select('*').not('status', 'ilike', 'paid'),
+      freelancerPromise,
     ]);
-    const { data, error } = expenseResult;
-      
-    if (error) console.error("Error fetching expenses:", error);
-    if (data) setExpenses(data);
+
+    if (recentResult.error) console.error("Error fetching expenses:", recentResult.error);
+    if (unpaidResult.error) console.error("Error fetching outstanding expenses:", unpaidResult.error);
     if (freelancerResult.error) console.error("Error fetching payees:", freelancerResult.error);
     if (freelancerResult.data) setFreelancers(freelancerResult.data as Contact[]);
+
+    const merged = new Map<string, Expense>();
+    for (const exp of recentResult.data || []) merged.set(exp.id, exp);
+    for (const exp of unpaidResult.data || []) merged.set(exp.id, exp);
+    setExpenses(Array.from(merged.values()).sort((a, b) => (b.date || "").localeCompare(a.date || "")));
     setIsLoading(false);
-  }, [router]);
+  }, [router, showAllHistory]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -74,6 +104,21 @@ export default function ExpensesPage() {
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [fetchExpenses]);
+
+  const handleLoadOlderExpenses = async () => {
+    setIsLoadingMore(true);
+    setShowAllHistory(true);
+    await fetchExpenses(false, true);
+    setIsLoadingMore(false);
+  };
+
+  const handleMonthFilterChange = (value: MonthFilter) => {
+    setMonthFilter(value);
+    // A custom month could be arbitrarily far back, past the default window.
+    if (value === "custom" && !showAllHistory) {
+      void handleLoadOlderExpenses();
+    }
+  };
 
   const currentMonthKey = getCurrentMonthKeyInMalaysia();
   const previousMonthKey = getPreviousMonthKey(currentMonthKey);
@@ -329,7 +374,7 @@ export default function ExpensesPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-end">
             <select
               value={monthFilter}
-              onChange={(event) => setMonthFilter(event.target.value as MonthFilter)}
+              onChange={(event) => handleMonthFilterChange(event.target.value as MonthFilter)}
               className="h-12 rounded-[18px] border border-gray-200 bg-white/60 px-4 text-sm font-bold text-gray-700 backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-800 dark:bg-[#111111]/60 dark:text-gray-300"
             >
               <option value="current">This Month</option>
@@ -557,6 +602,18 @@ export default function ExpensesPage() {
             <svg className="mb-4 h-12 w-12 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             No expenses recorded yet.
             <span className="mt-2 text-xs text-gray-400">{selectedPeriodLabel}</span>
+          </div>
+        )}
+
+        {!showAllHistory && !isLoading && (
+          <div className="flex justify-center mt-6">
+            <button
+              onClick={handleLoadOlderExpenses}
+              disabled={isLoadingMore}
+              className="px-6 py-3 rounded-2xl text-sm font-bold text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isLoadingMore ? "Loading…" : `Load expenses older than ${DEFAULT_HISTORY_MONTHS} months`}
+            </button>
           </div>
         )}
       </div>

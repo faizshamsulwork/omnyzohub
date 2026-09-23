@@ -14,12 +14,21 @@ import {
   getCurrentMonthKeyInMalaysia,
   getInvoiceOutstandingBalance,
   getMonthKey,
+  getMonthKeyMonthsAgo,
   getPreviousMonthKey,
   isPaidStatus,
   isPartialStatus,
+  monthKeyToDateInput,
   normalizeStatus,
   sortMonthKeysDescending,
 } from "../lib/utils";
+
+// Default window keeps the page from pulling the entire invoice history on
+// every load (the app already hit a Supabase egress quota once from
+// unbounded fetches like this — see the keep-alive/env-split work).
+// "Load older invoices" below removes this bound when someone actually
+// needs to look further back.
+const DEFAULT_HISTORY_MONTHS = 6;
 
 const csvEscape = (value: string | number) => {
   const text = String(value ?? "");
@@ -34,25 +43,46 @@ export default function InvoicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState<MonthFilter>("all");
   const [customMonth, setCustomMonth] = useState(getCurrentMonthKeyInMalaysia());
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // STATES UNTUK MODAL PARTIAL PAYMENT
   const [partialModal, setPartialModal] = useState<{isOpen: boolean, invoice: Invoice | null}>({isOpen: false, invoice: null});
   const [partialAmount, setPartialAmount] = useState("");
   const [isSavingPayment, setIsSavingPayment] = useState(false);
 
-  const fetchInvoices = useCallback(async (showLoader = true) => {
+  const fetchInvoices = useCallback(async (showLoader = true, loadAll = showAllHistory) => {
     if (showLoader) setIsLoading(true);
-    const { data, error } = await supabase
-      .from("invoices")
-      .select("*")
-      .order("created_at", { ascending: false });
 
-    if (error) console.error("Error fetching invoices:", error);
-    if (data) {
-      setInvoices(data);
+    if (loadAll) {
+      const { data, error } = await supabase.from("invoices").select("*").order("created_at", { ascending: false });
+      if (error) console.error("Error fetching invoices:", error);
+      if (data) setInvoices(data);
+      setIsLoading(false);
+      return;
     }
+
+    // Default view: recent invoices regardless of status, PLUS any
+    // outstanding/partial invoice regardless of age (an unpaid invoice from
+    // 8 months ago is still owed money and must never silently disappear
+    // just because it's old — only fully-paid history gets cut off).
+    const cutoff = monthKeyToDateInput(getMonthKeyMonthsAgo(DEFAULT_HISTORY_MONTHS));
+    const [recentResult, unpaidResult] = await Promise.all([
+      cutoff
+        ? supabase.from("invoices").select("*").gte("created_at", cutoff).order("created_at", { ascending: false })
+        : supabase.from("invoices").select("*").order("created_at", { ascending: false }),
+      supabase.from("invoices").select("*").not("status", "ilike", "paid"),
+    ]);
+
+    if (recentResult.error) console.error("Error fetching invoices:", recentResult.error);
+    if (unpaidResult.error) console.error("Error fetching outstanding invoices:", unpaidResult.error);
+
+    const merged = new Map<string, Invoice>();
+    for (const inv of recentResult.data || []) merged.set(inv.id, inv);
+    for (const inv of unpaidResult.data || []) merged.set(inv.id, inv);
+    setInvoices(Array.from(merged.values()).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")));
     setIsLoading(false);
-  }, []);
+  }, [showAllHistory]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -60,6 +90,21 @@ export default function InvoicesPage() {
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [fetchInvoices]);
+
+  const handleLoadOlderInvoices = async () => {
+    setIsLoadingMore(true);
+    setShowAllHistory(true);
+    await fetchInvoices(false, true);
+    setIsLoadingMore(false);
+  };
+
+  const handleMonthFilterChange = (value: MonthFilter) => {
+    setMonthFilter(value);
+    // A custom month could be arbitrarily far back, past the default window.
+    if (value === "custom" && !showAllHistory) {
+      void handleLoadOlderInvoices();
+    }
+  };
 
   // LOGIK SIMPAN BAYARAN (DEPOSIT / BAKI)
   const handleSavePartialPayment = async () => {
@@ -240,7 +285,7 @@ export default function InvoicesPage() {
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
             <select
               value={monthFilter}
-              onChange={(event) => setMonthFilter(event.target.value as MonthFilter)}
+              onChange={(event) => handleMonthFilterChange(event.target.value as MonthFilter)}
               className="bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm font-bold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="current">This Month</option>
@@ -382,6 +427,18 @@ export default function InvoicesPage() {
                 </section>
               );
             })}
+          </div>
+        )}
+
+        {!showAllHistory && !isLoading && (
+          <div className="flex justify-center mt-6">
+            <button
+              onClick={handleLoadOlderInvoices}
+              disabled={isLoadingMore}
+              className="px-6 py-3 rounded-2xl text-sm font-bold text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isLoadingMore ? "Loading…" : `Load invoices older than ${DEFAULT_HISTORY_MONTHS} months`}
+            </button>
           </div>
         )}
 

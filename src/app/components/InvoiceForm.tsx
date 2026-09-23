@@ -590,21 +590,18 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
         }
       } else {
         const prefix = `${dateStr}-PV`;
-        const { data: lastPV } = await supabase
-          .from("expenses")
-          .select("description")
-          .like("description", `[${prefix}%`)
-          .order("created_at", { ascending: false });
-
         let nextNum = 1;
-        if (lastPV && lastPV.length > 0) {
-          const maxPV = lastPV.reduce((max, curr) => {
-            const match = curr.description.match(/-PV(\d+)]/);
-            if (!match) return max;
-            const num = parseInt(match[1]);
-            return num > max ? num : max;
-          }, 0);
-          nextNum = maxPV + 1;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            const response = await fetch(`/api/expenses/next-voucher-number?prefix=${encodeURIComponent(prefix)}`, {
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            });
+            const result = await response.json().catch(() => null);
+            if (response.ok && result?.nextNum) nextNum = result.nextNum;
+          }
+        } catch {
+          // Network/API failure: falls back to PV01, same as before this lookup existed.
         }
         setFormData((prev) => ({ ...prev, invoice_no: `${prefix}${String(nextNum).padStart(2, "0")}`, terms: invoiceTemplates.voucher }));
       }

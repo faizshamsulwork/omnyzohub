@@ -5,24 +5,53 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import QuotationAction from "../components/QuotationAction";
 import type { Quotation } from "../lib/types";
-import { formatCurrency, formatDateOnly, normalizeStatus } from "../lib/utils";
+import { formatCurrency, formatDateOnly, getMonthKeyMonthsAgo, monthKeyToDateInput, normalizeStatus } from "../lib/utils";
 
 type QuotationRow = Pick<Quotation, "id" | "created_at" | "quote_no" | "client_name" | "date" | "total" | "status">;
+
+// Same egress-safety window as invoices/expenses — see invoices/page.tsx's DEFAULT_HISTORY_MONTHS comment.
+const DEFAULT_HISTORY_MONTHS = 6;
+const QUOTATION_COLUMNS = "id,created_at,quote_no,client_name,date,total,status";
 
 export default function QuotationsPage() {
   const [quotes, setQuotes] = useState<QuotationRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const loadQuotes = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("quotations")
-      .select("id,created_at,quote_no,client_name,date,total,status")
-      .order("created_at", { ascending: false });
+  const loadQuotes = useCallback(async (loadAll = showAllHistory) => {
+    if (loadAll) {
+      const { data, error } = await supabase
+        .from("quotations")
+        .select(QUOTATION_COLUMNS)
+        .order("created_at", { ascending: false });
+      if (error) console.error("Error fetching quotations:", error);
+      setQuotes((data as QuotationRow[]) || []);
+      setIsLoading(false);
+      return;
+    }
 
-    if (error) console.error("Error fetching quotations:", error);
-    setQuotes((data as QuotationRow[]) || []);
+    // Default view: recent quotations regardless of status, PLUS any
+    // not-yet-approved quote regardless of age (a draft/sent quote is still
+    // active pipeline no matter how old — only approved/closed ones get
+    // cut off by default).
+    const cutoff = monthKeyToDateInput(getMonthKeyMonthsAgo(DEFAULT_HISTORY_MONTHS));
+    const [recentResult, pipelineResult] = await Promise.all([
+      cutoff
+        ? supabase.from("quotations").select(QUOTATION_COLUMNS).gte("created_at", cutoff).order("created_at", { ascending: false })
+        : supabase.from("quotations").select(QUOTATION_COLUMNS).order("created_at", { ascending: false }),
+      supabase.from("quotations").select(QUOTATION_COLUMNS).not("status", "ilike", "approved"),
+    ]);
+
+    if (recentResult.error) console.error("Error fetching quotations:", recentResult.error);
+    if (pipelineResult.error) console.error("Error fetching pipeline quotations:", pipelineResult.error);
+
+    const merged = new Map<string, QuotationRow>();
+    for (const q of (recentResult.data as QuotationRow[]) || []) merged.set(q.id, q);
+    for (const q of (pipelineResult.data as QuotationRow[]) || []) merged.set(q.id, q);
+    setQuotes(Array.from(merged.values()).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")));
     setIsLoading(false);
-  }, []);
+  }, [showAllHistory]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -30,6 +59,13 @@ export default function QuotationsPage() {
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [loadQuotes]);
+
+  const handleLoadOlderQuotes = async () => {
+    setIsLoadingMore(true);
+    setShowAllHistory(true);
+    await loadQuotes(true);
+    setIsLoadingMore(false);
+  };
 
   const draftQuotes = quotes.filter((q) => normalizeStatus(q.status) === "draft");
   const approvedQuotes = quotes.filter((q) => normalizeStatus(q.status) === "approved");
@@ -114,6 +150,18 @@ export default function QuotationsPage() {
             <div className="flex justify-center py-20 text-gray-500">No quotations found.</div>
           )}
         </div>
+
+        {!showAllHistory && !isLoading && (
+          <div className="flex justify-center mt-6">
+            <button
+              onClick={handleLoadOlderQuotes}
+              disabled={isLoadingMore}
+              className="px-6 py-3 rounded-2xl text-sm font-bold text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isLoadingMore ? "Loading…" : `Load quotations older than ${DEFAULT_HISTORY_MONTHS} months`}
+            </button>
+          </div>
+        )}
 
       </div>
     </div>
