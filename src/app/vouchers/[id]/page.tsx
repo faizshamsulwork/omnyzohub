@@ -7,8 +7,9 @@ import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 import PrintButton from "../../components/PrintButton"; 
 import { COMPANY_PROFILE } from "../../lib/company";
+import { PDF_COLORS, type PdfDocumentModel } from "../../lib/pdf";
 import type { Contact, Expense } from "../../lib/types";
-import { parseExpenseDescription } from "../../lib/utils";
+import { formatCurrency, formatDateOnly, parseExpenseDescription, toMoney } from "../../lib/utils";
 
 interface ParsedVoucherData {
   voucherNo: string;
@@ -139,6 +140,80 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
   const documentTitle = `${voucherTitle} ${parsedData.voucherNo}`;
   const pdfFilename = `${parsedData.voucherNo}_${parsedData.paidPersonally ? "Reimbursement" : "Payment"}_Voucher.pdf`;
 
+  const buildPdfDocument = (): PdfDocumentModel => ({
+    filename: pdfFilename,
+    title: voucherTitle,
+    titleColor: PDF_COLORS.purple,
+    accent: PDF_COLORS.purple,
+    subject: `${voucherTitle} ${parsedData.voucherNo} for ${parsedData.name}`,
+    keywords: [parsedData.voucherNo, parsedData.name, expense.category, COMPANY_PROFILE.currencyCode],
+    meta: [
+      { label: "Voucher No:", value: parsedData.voucherNo },
+      { label: "Date:", value: formatDateOnly(expense.date) },
+      { label: "Category:", value: expense.category.replace(" *", "") },
+    ],
+    party: {
+      heading: parsedData.paidPersonally ? "Reimbursed To" : "Paid To",
+      name: parsedData.name,
+      lines: [
+        ...(freelancer?.service_role ? [{ text: freelancer.service_role.toUpperCase(), strong: true, color: PDF_COLORS.muted, size: 7 }] : []),
+        ...(freelancer?.email ? [{ text: freelancer.email }] : []),
+        ...(freelancer?.phone ? [{ text: freelancer.phone }] : []),
+      ],
+      callout: parsedData.paidPersonally
+        ? {
+          heading: "Original Vendor / Merchant",
+          body: parsedData.originalVendorName || "Not recorded",
+        }
+        : undefined,
+    },
+    columns: [
+      { header: "Description of Services / Goods", width: 70, align: "left" },
+      { header: "Qty", width: 10, align: "center" },
+      { header: `Amount (${COMPANY_PROFILE.currencyCode})`, width: 20, align: "right" },
+    ],
+    rows: [{
+      type: "item",
+      description: parsedData.itemDesc,
+      footnote: parsedData.paidPersonally && parsedData.originalVendorName
+        ? `Paid personally for: ${parsedData.originalVendorName}`
+        : undefined,
+      values: ["1", toMoney(expense.amount)],
+    }],
+    grandTotal: {
+      label: parsedData.paidPersonally ? "Total Reimbursed" : "Total Paid",
+      value: formatCurrency(expense.amount),
+      color: PDF_COLORS.purple,
+      tint: PDF_COLORS.purpleTint,
+    },
+    panels: [
+      {
+        kind: "box",
+        heading: `Transfer Details (${parsedData.paidPersonally ? "Claimant" : "Beneficiary"})`,
+        borderColor: PDF_COLORS.black,
+        ...(freelancer && freelancer.bank_account
+          ? {
+            rows: [
+              { label: "Account Name", value: freelancer.name },
+              { label: "Bank Name", value: freelancer.bank_name || "-" },
+              { label: "Account No", value: freelancer.bank_account, color: PDF_COLORS.purple },
+            ],
+          }
+          : {
+            text: parsedData.paidPersonally
+              ? "Reimbursement payable to claimant. Attach company bank transfer proof once reimbursed."
+              : "No bank details recorded in contact directory.",
+          }),
+      },
+      {
+        kind: "signature",
+        caption: "Authorized By",
+        subCaption: `Faiz Shamsul - ${COMPANY_PROFILE.brandName}`,
+        imageUrl: "/signature.png",
+      },
+    ],
+  });
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32 transition-colors duration-300">
       
@@ -150,7 +225,7 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
         </Link>
         
         <div className="flex items-center gap-3">
-          <PrintButton documentName={documentTitle} targetId="voucher-document" filename={pdfFilename} />
+          <PrintButton documentName={documentTitle} buildDocument={buildPdfDocument} />
         </div>
       </div>
 
@@ -207,9 +282,9 @@ export default function VoucherViewer({ params }: { params: Promise<{ id: string
                   </div>
                 )}
                 {freelancer && (
-                  <div className="mt-2 space-y-1 pl-3">
+                  <div className="mt-[7mm] space-y-[1.4mm] pl-3">
                     {freelancer.service_role && <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">{freelancer.service_role}</p>}
-                    {freelancer.email && <p className="text-[11px] text-[#374151] pt-1">{freelancer.email}</p>}
+                    {freelancer.email && <p className="text-[11px] text-[#374151]">{freelancer.email}</p>}
                     {freelancer.phone && <p className="text-[11px] text-[#374151]">{freelancer.phone}</p>}
                   </div>
                 )}

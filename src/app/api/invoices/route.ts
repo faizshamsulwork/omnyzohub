@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { isValidDateOnly } from "../../lib/utils";
+import { assertSupabaseUrlMatchesEnv } from "../../lib/env";
 
 const INVOICE_NUMBER_PATTERN = /^[A-Za-z0-9/_-]+$/;
 const MAX_INVOICE_NUMBER_LENGTH = 64;
@@ -39,6 +40,8 @@ const getServerSupabase = (accessToken: string) => {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error("Missing Supabase environment variables.");
   }
+
+  assertSupabaseUrlMatchesEnv(supabaseUrl);
 
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {

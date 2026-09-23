@@ -15,6 +15,7 @@ import {
   getMonthKey,
   getPaymentVoucherPrefix,
   getPreviousMonthKey,
+  isPaidStatus,
   isSuperadminEmail,
   parseExpenseDescription,
   sortMonthKeysDescending,
@@ -107,7 +108,7 @@ export default function ExpensesPage() {
   const expenseMonthKeys = Object.keys(expenseGroups).sort(sortMonthKeysDescending);
   const selectedPeriodLabel = activeMonthKey ? formatMonthLabel(activeMonthKey) : "All Months";
 
-  const paidExpenses = filteredExpenses.filter(exp => exp.status === 'Paid');
+  const paidExpenses = filteredExpenses.filter(exp => isPaidStatus(exp.status));
   const totalExpenses = paidExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const totalDocumentsSaved = filteredExpenses.reduce((sum, exp) => {
     return sum + (exp.receipt_url ? 1 : 0) + (exp.payment_proof_url ? 1 : 0);
@@ -312,7 +313,9 @@ export default function ExpensesPage() {
 
         <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
           <div className="relative w-full xl:max-w-xl">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+            {/* z-10: the input's backdrop-blur creates a stacking context that
+                otherwise paints straight over this icon. */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-4">
               <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             </div>
             <input
@@ -367,7 +370,7 @@ export default function ExpensesPage() {
             {expenseMonthKeys.map((monthKey) => {
               const monthExpenses = expenseGroups[monthKey];
               const monthPaidTotal = monthExpenses
-                .filter((exp) => exp.status === "Paid")
+                .filter((exp) => isPaidStatus(exp.status))
                 .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
               const monthMissingDocuments = monthExpenses.reduce((sum, exp) => {
                 return sum + (exp.receipt_url ? 0 : 1) + (exp.payment_proof_url ? 0 : 1);
@@ -414,7 +417,7 @@ export default function ExpensesPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-900">
                         {monthExpenses.map((exp) => {
-                          const isPaid = exp.status === 'Paid';
+                          const isPaid = isPaidStatus(exp.status);
                           const parsedExpense = parseExpenseDescription(exp.description);
                           const isSystemPV = Boolean(parsedExpense.voucherNo);
                           const isReimbursement = parsedExpense.paidPersonally;

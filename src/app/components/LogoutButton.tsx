@@ -14,8 +14,9 @@ export default function LogoutButton() {
     
     if (!error) {
       toast.success("Logged out successfully.", { id: toastId });
+      // No router.refresh() here: it cancels the in-flight replace() and leaves
+      // the user staring at a blank screen instead of the login page.
       router.replace("/login");
-      router.refresh();
     } else {
       toast.error("Error logging out.", { id: toastId });
     }

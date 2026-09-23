@@ -7,14 +7,20 @@ import Link from "next/link";
 import { toast } from "sonner";
 import Swal from 'sweetalert2';
 import type { Quotation } from "../lib/types";
-import { addDaysToDateInput, formatDateInputInMalaysia, getErrorMessage } from "../lib/utils";
+import { addDaysToDateInput, formatDateInputInMalaysia, getErrorMessage, normalizeStatus } from "../lib/utils";
 import { COMPANY_PROFILE } from "../lib/company";
 
 type QuotationActionQuote = Pick<Quotation, "id" | "quote_no" | "client_name" | "total" | "status">;
 
-export default function QuotationAction({ quote }: { quote: QuotationActionQuote | null }) {
+export default function QuotationAction({ quote, onUpdate }: { quote: QuotationActionQuote | null, onUpdate?: () => void }) {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // The list is client-rendered, so router.refresh() alone will not repaint it.
+  const refreshList = () => {
+    if (onUpdate) onUpdate();
+    else router.refresh();
+  };
 
   if (!quote) return null;
 
@@ -99,7 +105,7 @@ export default function QuotationAction({ quote }: { quote: QuotationActionQuote
       await supabase.from("quotations").update({ status: "Approved" }).eq("id", fullQuote.id);
 
       toast.success(`Success! Itemized Invoice ${nextInvNo} created.`, { id: loadingToast });
-      router.refresh();
+      refreshList();
     } catch (err: unknown) {
       toast.error(`Failed to convert: ${getErrorMessage(err)}`, { id: loadingToast });
     } finally {
@@ -149,7 +155,7 @@ export default function QuotationAction({ quote }: { quote: QuotationActionQuote
       if (error) throw error;
 
       toast.success(`Duplicated successfully as ${nextQuoteNo}`, { id: loadingToast });
-      router.refresh();
+      refreshList();
     } catch (err: unknown) {
       toast.error(`Error duplicating: ${getErrorMessage(err)}`, { id: loadingToast });
     } finally {
@@ -204,7 +210,7 @@ export default function QuotationAction({ quote }: { quote: QuotationActionQuote
         if (deleteError) throw deleteError;
 
         toast.success("Quotation securely deleted.", { id: loadingToast });
-        router.refresh();
+        refreshList();
 
       } catch (err: unknown) {
         toast.error(`System Error: ${getErrorMessage(err)}`, { id: loadingToast });
@@ -216,7 +222,7 @@ export default function QuotationAction({ quote }: { quote: QuotationActionQuote
 
   return (
     <div className="flex items-center justify-end gap-3">
-      {quote.status !== "Approved" && (
+      {normalizeStatus(quote.status) !== "approved" && (
         <button onClick={convertToInvoice} disabled={isProcessing} className="text-[10px] font-bold px-3 py-1.5 rounded-full border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all active:scale-95 disabled:opacity-50">
           {isProcessing ? "PROCESSING..." : "CONVERT"}
         </button>

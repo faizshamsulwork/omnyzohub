@@ -13,6 +13,7 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [type, setType] = useState<"Customer" | "Freelancer">("Customer"); 
 
   const [formData, setFormData] = useState({
@@ -27,7 +28,7 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
         .from("contacts")
         .select("*")
         .eq("id", contactId)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setType(data.contact_type);
@@ -48,7 +49,11 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
           state: data.state || "",
           country: data.country || "Malaysia"
         });
-      } else if (error) {
+      } else {
+        // A missing row or a malformed id must not fall through to an empty,
+        // editable form that looks like a real contact.
+        if (error) console.error("Error fetching contact:", error);
+        setNotFound(true);
         toast.error("Contact not found!");
       }
       setFetching(false);
@@ -93,6 +98,16 @@ export default function EditContact({ params }: { params: Promise<{ id: string }
   };
 
   if (fetching) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400 animate-pulse">Loading contact data...</div>;
+
+  if (notFound) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-xl font-bold text-red-500">Contact not found.</p>
+        <p className="text-sm text-gray-500">This contact may have been deleted, or the link is invalid.</p>
+        <Link href="/contacts" className="mt-2 text-sm font-bold text-blue-600 hover:underline">&larr; Back to Contacts</Link>
+      </div>
+    );
+  }
   const isFreelancerCompany = type === "Freelancer" && formData.customer_type === "Company";
 
   return (

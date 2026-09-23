@@ -395,7 +395,7 @@ export default function NewQuotationWizard() {
                       <div key={item.id} className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-gray-50 dark:bg-[#0A0A0A] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 transition-colors">
                         <div className="flex-1 w-full">
                           <textarea
-                            placeholder="- Item description&#10;- Support bullet points (Shift+Enter)"
+                            placeholder="- Item description&#10;- Support bullet points, **bold**, *italic* (Shift+Enter)"
                             required rows={2}
                             className="w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none p-3 resize-y"
                             value={item.description}
@@ -427,7 +427,7 @@ export default function NewQuotationWizard() {
             {step === 3 && (
               <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-4">Notes & Terms</h2>
-                <div><label className="block text-sm font-medium text-gray-500 mb-2">Notes (Internal or extra details)</label><textarea rows={3} className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Optional notes..."></textarea></div>
+                <div><label className="block text-sm font-medium text-gray-500 mb-2">Notes (Internal or extra details)</label><textarea rows={3} className="w-full p-4 bg-gray-50 dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Optional notes..."></textarea><p className="mt-2 text-xs text-gray-400">Notes and terms both support **bold**, *italic*, and &quot;- &quot; bullet lines on the PDF.</p></div>
                 <div className="pt-4"><div className="flex justify-between items-end mb-2"><label className="block text-sm font-medium text-gray-500">Terms & Conditions</label><select className="bg-gray-100 dark:bg-[#151515] border border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none cursor-pointer" onChange={(e) => { if (e.target.value !== "custom") { setFormData({ ...formData, terms: tcTemplates[e.target.value as keyof typeof tcTemplates] }); } }}>
                   <option value="custom">Load Template...</option>
                   <option value="omnyzo_agency">Omnyzo Agency T&C (Recommended)</option>

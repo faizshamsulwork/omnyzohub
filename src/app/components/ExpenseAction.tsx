@@ -4,12 +4,12 @@ import { supabase } from "../lib/supabase";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Expense } from "../lib/types";
-import { parseExpenseDescription } from "../lib/utils";
+import { isPaidStatus, parseExpenseDescription } from "../lib/utils";
 
 export default function ExpenseAction({ expense, onUpdate }: { expense: Expense, onUpdate: () => void }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const isPaid = expense.status === 'Paid';
+  const isPaid = isPaidStatus(expense.status);
   const isReimbursement = parseExpenseDescription(expense.description).paidPersonally;
 
   const toggleStatus = async () => {

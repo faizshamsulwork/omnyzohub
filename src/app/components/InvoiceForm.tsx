@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Reorder, useDragControls } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { COMPANY_PROFILE } from "../lib/company";
@@ -281,9 +281,18 @@ function LineItemEditorRow({
               placeholder="Section Title"
               required
               rows={1}
+              ref={(el) => {
+                if (!el) return;
+                el.style.height = "auto";
+                el.style.height = `${el.scrollHeight}px`;
+              }}
               className="w-full resize-none overflow-hidden rounded-xl border border-blue-100 bg-white/70 p-3 text-sm font-bold text-blue-800 outline-none focus:ring-2 focus:ring-blue-500 dark:border-blue-900/50 dark:bg-black/30 dark:text-blue-300"
               value={item.description}
-              onChange={(event) => onChange(index, "description", event.target.value)}
+              onChange={(event) => {
+                onChange(index, "description", event.target.value);
+                event.target.style.height = "auto";
+                event.target.style.height = `${event.target.scrollHeight}px`;
+              }}
               onKeyDown={onEnterKey}
             />
           </div>
@@ -295,9 +304,18 @@ function LineItemEditorRow({
                 placeholder="- Item description&#10;- Support bullet points"
                 required
                 rows={2}
+                ref={(el) => {
+                  if (!el) return;
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }}
                 className="w-full resize-y rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-black dark:text-white"
                 value={item.description}
-                onChange={(event) => onChange(index, "description", event.target.value)}
+                onChange={(event) => {
+                  onChange(index, "description", event.target.value);
+                  event.target.style.height = "auto";
+                  event.target.style.height = `${event.target.scrollHeight}px`;
+                }}
                 onKeyDown={onEnterKey}
               />
             </div>
@@ -379,7 +397,9 @@ function LineItemEditorRow({
 
 export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isEditMode = mode === "edit";
+  const duplicateId = searchParams.get("duplicate");
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(isEditMode);
@@ -393,6 +413,7 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
   const [generalError, setGeneralError] = useState("");
   const [initialSnapshot, setInitialSnapshot] = useState("");
   const [existingInvoice, setExistingInvoice] = useState<Invoice | null>(null);
+  const [duplicateSourceNo, setDuplicateSourceNo] = useState<string | null>(null);
   const [saveComplete, setSaveComplete] = useState(false);
   const beforeUnloadArmedRef = useRef(false);
 
@@ -487,6 +508,49 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
           discount: toNumber(invoice.discount),
           contactTypeFilter: "Customer",
         }));
+      } else if (duplicateId) {
+        const { data: sourceData, error: sourceError } = await supabase
+          .from("invoices")
+          .select("*")
+          .eq("id", duplicateId)
+          .single();
+
+        if (sourceError || !sourceData) {
+          toast.error("Could not load the invoice to duplicate. Starting a blank invoice instead.");
+          const defaultContact = typedContacts.find((contact) => contact.contact_type === "Customer");
+          if (defaultContact) handleClientSelect(defaultContact.id, typedContacts);
+        } else {
+          const source = sourceData as Invoice;
+          const loadedItems = normaliseItems(source.items, source.description || "Creative Services", source.amount);
+          const sourceIssueDate = toDateInput(source.created_at);
+          const sourceDueDate = toDateInput(source.due_date);
+          const creditTermDays = sourceIssueDate && sourceDueDate
+            ? Math.round((new Date(sourceDueDate).getTime() - new Date(sourceIssueDate).getTime()) / (24 * 60 * 60 * 1000))
+            : NaN;
+          const matchedContact = typedContacts.find((contact) => (
+            contact.name === source.client_name
+            && (!source.client_email || contact.email === source.client_email)
+            && (!source.client_pic || contact.pic_name === source.client_pic)
+          ));
+
+          setFormData((prev) => ({
+            ...prev,
+            client_name: source.client_name || "",
+            client_pic: source.client_pic || "",
+            client_phone: source.client_phone || "",
+            client_email: source.client_email || "",
+            client_address: source.client_address || "",
+            credit_term: Number.isFinite(creditTermDays) && creditTermDays > 0 ? String(creditTermDays) : prev.credit_term,
+            description: source.description || "Creative Services",
+            notes: source.notes || "",
+            terms: source.terms || prev.terms,
+          }));
+          setContactTypeFilter("Customer");
+          setSelectedContactId(matchedContact?.id || "");
+          setItems(loadedItems);
+          setDiscount(toNumber(source.discount));
+          setDuplicateSourceNo(source.invoice_no || null);
+        }
       } else {
         const defaultContact = typedContacts.find((contact) => contact.contact_type === "Customer");
         if (defaultContact) handleClientSelect(defaultContact.id, typedContacts);
@@ -496,7 +560,7 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
     };
 
     void loadInitialData();
-  }, [handleClientSelect, invoiceId, isEditMode]);
+  }, [handleClientSelect, invoiceId, isEditMode, duplicateId]);
 
   useEffect(() => {
     if (isEditMode) return;
@@ -854,6 +918,11 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
                 Editing {existingInvoice.invoice_no}
               </p>
             )}
+            {!isEditMode && duplicateSourceNo && (
+              <p className="mt-2 text-sm font-bold text-gray-500">
+                Duplicated from {duplicateSourceNo}. Review the details and amounts before saving.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((num) => (
@@ -997,7 +1066,7 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
               <div className="flex flex-col gap-4 border-b border-gray-100 pb-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">Line Items</h2>
-                  <p className="mt-1 text-xs font-medium text-gray-500">Drag with the grip, or use the arrow buttons for keyboard-friendly ordering.</p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">Drag with the grip, or use the arrow buttons for keyboard-friendly ordering. A description with several lines becomes a heading with bullets on the PDF — try **bold** and *italic* too.</p>
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={addTitle} className="rounded-full bg-blue-100 px-4 py-2 text-xs font-bold text-blue-700 transition-transform hover:scale-105 dark:bg-blue-900/30 dark:text-blue-400">+ ADD TITLE</button>
@@ -1046,7 +1115,10 @@ export default function InvoiceForm({ mode, invoiceId }: InvoiceFormProps) {
 
           {step === 3 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-              <h2 className="border-b border-gray-100 pb-4 text-xl font-bold text-gray-900 dark:border-gray-800 dark:text-white">Notes & Terms</h2>
+              <div className="border-b border-gray-100 pb-4 dark:border-gray-800">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Notes & Terms</h2>
+                <p className="mt-1 text-xs font-medium text-gray-500">Formatting works here too: **bold**, *italic*, and a line starting with &quot;- &quot; for a bullet.</p>
+              </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-500">Client References / Notes</label>
                 <textarea rows={3} className="w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-800 dark:bg-[#0A0A0A] dark:text-white" value={formData.notes} onChange={(event) => setField("notes", event.target.value)} placeholder={"PO No: \nProject Ref: \nPayment Ref: "} />

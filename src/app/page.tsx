@@ -98,7 +98,10 @@ export default function Dashboard() {
   // PENGIRAAN P&L
   const paidInvoices = invoices.filter(inv => isPaidStatus(inv.status));
   const totalRevenue = paidInvoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-  const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  // Cash basis, same rule as revenue above and as the Expenses page — counting
+  // unpaid expenses here made the two screens disagree on Total Expenses.
+  const paidExpenses = expenses.filter(exp => isPaidStatus(exp.status));
+  const totalExpenses = paidExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0.0";
 
@@ -168,7 +171,7 @@ export default function Dashboard() {
                 <div className={blurClass}>
                   <p className="text-3xl font-black text-red-600 dark:text-red-400">RM {totalExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-1">Company operational costs</p>
+                <p className="text-[10px] text-gray-500 mt-1">From {paidExpenses.length} paid records</p>
               </div>
               <div className={`bg-white/60 dark:bg-[#111111]/60 backdrop-blur-xl p-6 rounded-[24px] border ${netProfit >= 0 ? 'border-blue-200 dark:border-blue-900/30' : 'border-orange-200 dark:border-orange-900/30'}`}>
                 <h3 className={`text-[11px] font-bold uppercase tracking-widest mb-2 ${netProfit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit</h3>

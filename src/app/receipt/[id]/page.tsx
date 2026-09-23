@@ -1,39 +1,124 @@
-/* eslint-disable @next/next/no-img-element -- Raw images keep the print/PDF capture stable. */
+"use client";
 
-import { supabase } from "../../lib/supabase";
+/* eslint-disable @next/next/no-img-element -- Raw images keep the print layout stable. */
+
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { supabase } from "../../lib/supabase";
 import PrintButton from "../../components/PrintButton";
-import { isPaidStatus } from "../../lib/utils";
+import { COMPANY_PROFILE } from "../../lib/company";
+import { PDF_COLORS, type PdfDocumentModel } from "../../lib/pdf";
+import type { Contact, Invoice } from "../../lib/types";
+import { buildContactAddress, formatCurrency, isPaidStatus, toMoney } from "../../lib/utils";
 
-export const revalidate = 0;
+export default function ReceiptDocument({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const invoiceId = resolvedParams.id;
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const { data } = await supabase.from("invoices").select("invoice_no, id").eq("id", resolvedParams.id).single();
-  const title = `OR-${data?.invoice_no || data?.id.split('-')[0].toUpperCase()}`;
-  return { title: title };
-}
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [client, setClient] = useState<Contact | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-export default async function ReceiptDocument({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const { data: invoice } = await supabase.from("invoices").select("*").eq("id", resolvedParams.id).single();
+  useEffect(() => {
+    const fetchReceipt = async () => {
+      if (!invoiceId) return;
 
-  // Kalau invois belum dibayar, tak patut ada resit
-  if (!invoice || !isPaidStatus(invoice.status)) notFound();
+      const { data, error } = await supabase.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
+      if (error) console.error("Error fetching invoice:", error);
+      setInvoice(data);
 
-  const { data: client } = await supabase.from("contacts").select("*").eq("name", invoice.client_name).single();
+      if (data?.client_name) {
+        const { data: clientData } = await supabase
+          .from("contacts")
+          .select("*")
+          .eq("name", data.client_name)
+          .limit(1)
+          .maybeSingle();
+        if (clientData) setClient(clientData as Contact);
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchReceipt();
+  }, [invoiceId]);
+
+  // generateMetadata() can't run in a client component, so the tab title is
+  // set here instead once the invoice number is known — otherwise every
+  // receipt tab is stuck on the generic app title, indistinguishable from
+  // any other open tab.
+  useEffect(() => {
+    if (invoice) {
+      const invoiceNumber = invoice.invoice_no || `INV-${invoice.id.split('-')[0].toUpperCase()}`;
+      document.title = `OR-${invoiceNumber}`;
+    }
+  }, [invoice]);
+
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center font-bold animate-pulse text-gray-500">Loading Official Receipt...</div>;
+  if (!invoice) return <div className="min-h-screen flex items-center justify-center text-red-500 font-bold text-xl">Receipt not found.</div>;
+  if (!isPaidStatus(invoice.status)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-xl font-bold text-red-500">No receipt available.</p>
+        <p className="text-sm text-gray-500">A receipt is only issued once the invoice is fully paid.</p>
+        <Link href={`/invoice/${invoice.id}`} className="mt-2 text-sm font-bold text-blue-600 hover:underline">View the invoice instead</Link>
+      </div>
+    );
+  }
 
   const invoiceNumber = invoice.invoice_no || `INV-${invoice.id.split('-')[0].toUpperCase()}`;
-  // Tarikh resit dikeluarkan (Untuk mudah, kita paparkan hari ini atau tarikh invois diupdate)
   const receiptDateFormatted = new Date().toLocaleDateString('en-MY', { year: 'numeric', month: 'long', day: 'numeric' });
+  const clientAddress = client ? buildContactAddress(client) : invoice.client_address || "";
+
+  const buildPdfDocument = (): PdfDocumentModel => ({
+    filename: `OR-${invoiceNumber}.pdf`,
+    title: "Official Receipt",
+    titleColor: PDF_COLORS.success,
+    accent: PDF_COLORS.success,
+    watermark: "PAID",
+    subject: `Official Receipt for invoice ${invoiceNumber}`,
+    keywords: [invoiceNumber, invoice.client_name, "receipt", COMPANY_PROFILE.currencyCode],
+    meta: [
+      { label: "Ref:", value: invoiceNumber },
+      { label: "Receipt Date:", value: receiptDateFormatted },
+      { label: "Payment Status:", value: "FULLY PAID", color: PDF_COLORS.success },
+    ],
+    party: {
+      heading: "Received From",
+      name: invoice.client_name,
+      lines: [
+        ...(client?.pic_name ? [{ text: `Attn: ${client.pic_name}`, strong: true, color: PDF_COLORS.black, size: 8.4 }] : []),
+        ...(clientAddress ? [{ text: clientAddress }] : []),
+      ],
+    },
+    columns: [
+      { header: "Payment For", width: 76, align: "left" },
+      { header: `Amount Received (${COMPANY_PROFILE.currencyCode})`, width: 24, align: "right" },
+    ],
+    rows: [{
+      type: "item",
+      description: `Settlement for Invoice #${invoiceNumber}`,
+      subtitle: invoice.description || undefined,
+      values: [toMoney(invoice.amount)],
+    }],
+    grandTotal: {
+      label: "Total Paid",
+      value: formatCurrency(invoice.amount),
+      color: PDF_COLORS.success,
+      tint: PDF_COLORS.successTint,
+    },
+    closingNote: {
+      title: "Thank you for your business!",
+      subtitle: "This is a computer-generated receipt. No signature is required.",
+    },
+  });
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-black py-10 px-4 md:px-0 transition-colors print:p-0 print:bg-white">
 
       <div className="max-w-[21cm] mx-auto mb-6 flex justify-between items-center print:hidden">
         <Link href="/invoices" className="text-sm font-medium text-gray-500 hover:text-black dark:text-gray-400 flex items-center gap-2 transition-all active:scale-95">&larr; Back to Invoices</Link>
-        <PrintButton documentName={`OR-${invoiceNumber}`} />
+        <PrintButton documentName={`OR-${invoiceNumber}`} buildDocument={buildPdfDocument} />
       </div>
 
       <div className="w-full overflow-x-auto pb-10 print:overflow-visible">
@@ -61,7 +146,7 @@ export default async function ReceiptDocument({ params }: { params: Promise<{ id
                   {client && (
                     <div className="text-xs text-gray-600 leading-relaxed">
                       {client.pic_name && <p className="font-bold text-gray-800">Attn: {client.pic_name}</p>}
-                      <p className="max-w-[280px]">{client.address}, {client.postcode} {client.city}, {client.state}</p>
+                      <p className="max-w-[280px]">{clientAddress}</p>
                     </div>
                   )}
                 </div>
@@ -92,7 +177,7 @@ export default async function ReceiptDocument({ params }: { params: Promise<{ id
                         Settlement for Invoice #{invoiceNumber}
                         <br/><span className="text-gray-500 text-xs">{invoice.description}</span>
                       </td>
-                      <td className="py-8 px-2 text-sm font-bold text-black text-right">RM {Number(invoice.amount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-8 px-2 text-sm font-bold text-black text-right">{formatCurrency(invoice.amount)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -103,7 +188,7 @@ export default async function ReceiptDocument({ params }: { params: Promise<{ id
                 <div className="w-full max-w-[320px]">
                   <div className="flex justify-between py-4 border-t-2 border-black mt-2 bg-green-50/50 px-4 rounded-xl">
                     <span className="text-lg font-black uppercase tracking-tighter text-green-800">Total Paid</span>
-                    <span className="text-2xl font-black text-green-700 tracking-tight">RM {Number(invoice.amount).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-2xl font-black text-green-700 tracking-tight">{formatCurrency(invoice.amount)}</span>
                   </div>
                 </div>
               </div>

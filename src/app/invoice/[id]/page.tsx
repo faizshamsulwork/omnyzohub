@@ -7,8 +7,9 @@ import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 import PrintButton from "../../components/PrintButton";
 import { COMPANY_PROFILE } from "../../lib/company";
+import { PDF_COLORS, type PdfDocumentModel } from "../../lib/pdf";
 import type { Contact, Invoice, LineItem } from "../../lib/types";
-import { formatCurrency, formatDateOnly, getDateOnlyFromStorage, isPaidStatus } from "../../lib/utils";
+import { formatCurrency, formatDateOnly, getDateOnlyFromStorage, isPaidStatus, toMoney } from "../../lib/utils";
 
 export default function InvoiceViewer({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -83,50 +84,158 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
     const lineSubtotal = getLineSubtotal(item);
     return lineSubtotal + (lineSubtotal * ((Number(item.taxRate) || 0) / 100));
   };
-  const machineReadableItems =
-    invoice.items && invoice.items.length > 0
-      ? invoice.items
-          .filter((item) => item.type === "item")
-          .map(
-            (item, index) =>
-              `Line ${index + 1}: Description=${item.description}; Quantity=${item.qty}; UnitPrice=${formatMachineMoney(item.price)}; TaxRate=${item.taxRate || 0}; LineTotal=${formatMachineMoney(getLineAmountWithTax(item))}`
-          )
-      : [
-          `Line 1: Description=${invoice.description || "Creative Services"}; Quantity=1; UnitPrice=${formatMachineMoney(invoice.amount)}; TaxRate=0; LineTotal=${formatMachineMoney(invoice.amount)}`,
-        ];
-  const machineReadableText = [
-    `Document Type: ${isReceiptMode ? "Official Receipt" : "Invoice"}`,
-    `Document Number: ${invoice.invoice_no}`,
-    `Issue Date: ${formatMachineDate(issueDateOnly)}`,
-    dueDateOnly && !isReceiptMode ? `Due Date: ${formatMachineDate(dueDateOnly)}` : null,
-    `Status: ${invoice.status}`,
-    `Currency: ${COMPANY_PROFILE.currencyCode}`,
-    `Supplier Name: ${COMPANY_PROFILE.legalName}`,
-    `Supplier Registration Number: ${COMPANY_PROFILE.registrationNo}`,
-    `Supplier SST Registration Number: ${COMPANY_PROFILE.sstRegistrationNo}`,
-    `Supplier Email: ${COMPANY_PROFILE.email}`,
-    `Supplier Address: ${COMPANY_PROFILE.registeredOffice}`,
-    `Supplier Bank Name: ${COMPANY_PROFILE.bankName}`,
-    `Supplier Bank Account: ${COMPANY_PROFILE.bankAccountNo}`,
-    `Supplier Swift Code: ${COMPANY_PROFILE.swiftCode}`,
-    `Buyer Name: ${invoice.client_name}`,
-    invoice.client_pic ? `Buyer Attention: ${invoice.client_pic}` : null,
-    invoice.client_email ? `Buyer Email: ${invoice.client_email}` : null,
-    invoice.client_phone ? `Buyer Phone: ${invoice.client_phone}` : null,
-    invoice.client_address ? `Buyer Address: ${invoice.client_address}` : null,
-    client?.tin_no ? `Buyer TIN: ${client.tin_no}` : null,
-    client?.ssm_no ? `Buyer Registration Number: ${client.ssm_no}` : null,
-    client?.sst_no ? `Buyer SST Registration Number: ${client.sst_no}` : null,
-    ...machineReadableItems,
-    `Subtotal ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.subtotal || invoice.amount)}`,
-    `Discount ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.discount)}`,
-    `Tax Amount ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.tax_amount)}`,
-    `Total Payable ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.amount)}`,
-    invoice.notes ? `Notes: ${invoice.notes}` : null,
-    invoice.terms && !isReceiptMode ? `Terms: ${invoice.terms}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+
+  const buildPdfDocument = (): PdfDocumentModel => {
+    const accent = isReceiptMode ? PDF_COLORS.success : PDF_COLORS.black;
+
+    // Invisible OCR/ingestion data block — see PdfDocumentModel.machineReadableText.
+    const machineReadableItems =
+      invoice.items && invoice.items.length > 0
+        ? invoice.items
+            .filter((item) => item.type === "item")
+            .map(
+              (item, index) =>
+                `Line ${index + 1}: Description=${item.description}; Quantity=${item.qty}; UnitPrice=${formatMachineMoney(item.price)}; TaxRate=${item.taxRate || 0}; LineTotal=${formatMachineMoney(getLineAmountWithTax(item))}`,
+            )
+        : [
+            `Line 1: Description=${invoice.description || "Creative Services"}; Quantity=1; UnitPrice=${formatMachineMoney(invoice.amount)}; TaxRate=0; LineTotal=${formatMachineMoney(invoice.amount)}`,
+          ];
+    const machineReadableText = [
+      `Document Type: ${isReceiptMode ? "Official Receipt" : "Invoice"}`,
+      `Document Number: ${invoice.invoice_no}`,
+      `Issue Date: ${formatMachineDate(issueDateOnly)}`,
+      dueDateOnly && !isReceiptMode ? `Due Date: ${formatMachineDate(dueDateOnly)}` : null,
+      `Status: ${invoice.status}`,
+      `Currency: ${COMPANY_PROFILE.currencyCode}`,
+      `Supplier Name: ${COMPANY_PROFILE.legalName}`,
+      `Supplier Registration Number: ${COMPANY_PROFILE.registrationNo}`,
+      `Supplier SST Registration Number: ${COMPANY_PROFILE.sstRegistrationNo}`,
+      `Supplier Email: ${COMPANY_PROFILE.email}`,
+      `Supplier Address: ${COMPANY_PROFILE.registeredOffice}`,
+      `Supplier Bank Name: ${COMPANY_PROFILE.bankName}`,
+      `Supplier Bank Account: ${COMPANY_PROFILE.bankAccountNo}`,
+      `Supplier Swift Code: ${COMPANY_PROFILE.swiftCode}`,
+      `Buyer Name: ${invoice.client_name}`,
+      invoice.client_pic ? `Buyer Attention: ${invoice.client_pic}` : null,
+      invoice.client_email ? `Buyer Email: ${invoice.client_email}` : null,
+      invoice.client_phone ? `Buyer Phone: ${invoice.client_phone}` : null,
+      invoice.client_address ? `Buyer Address: ${invoice.client_address}` : null,
+      client?.tin_no ? `Buyer TIN: ${client.tin_no}` : null,
+      client?.ssm_no ? `Buyer Registration Number: ${client.ssm_no}` : null,
+      client?.sst_no ? `Buyer SST Registration Number: ${client.sst_no}` : null,
+      ...machineReadableItems,
+      `Subtotal ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.subtotal || invoice.amount)}`,
+      `Discount ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.discount)}`,
+      `Tax Amount ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.tax_amount)}`,
+      `Total Payable ${COMPANY_PROFILE.currencyCode}: ${formatMachineMoney(invoice.amount)}`,
+      invoice.notes ? `Notes: ${invoice.notes}` : null,
+      invoice.terms && !isReceiptMode ? `Terms: ${invoice.terms}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const rows = invoice.items && invoice.items.length > 0
+      ? invoice.items.map((item) => (
+        item.type === "title"
+          ? { type: "title" as const, description: item.description }
+          : {
+            type: "item" as const,
+            description: item.description,
+            values: [
+              String(item.qty),
+              toMoney(item.price),
+              item.taxRate ? `${item.taxRate}%` : "-",
+              toMoney(getLineAmountWithTax(item)),
+            ],
+          }
+      ))
+      : [{
+        type: "item" as const,
+        description: invoice.description || "Creative Services",
+        values: ["1", toMoney(invoice.amount), "-", toMoney(invoice.amount)],
+      }];
+
+    const totals = [
+      { label: "Subtotal", value: toMoney(invoice.subtotal || invoice.amount) },
+      ...(Number(invoice.discount) > 0
+        ? [{ label: "Discount", value: `- ${toMoney(invoice.discount)}`, color: PDF_COLORS.danger }]
+        : []),
+      ...(Number(invoice.tax_amount) !== 0
+        ? [{ label: "Tax", value: toMoney(invoice.tax_amount) }]
+        : []),
+    ];
+
+    const notesBlocks = [
+      ...(invoice.notes && !isReceiptMode ? [{ heading: "Notes", body: invoice.notes }] : []),
+      ...(invoice.terms && !isReceiptMode ? [{ heading: "Terms & Conditions", body: invoice.terms }] : []),
+    ];
+
+    return {
+      filename: pdfFilename,
+      title: isReceiptMode ? "Official Receipt" : "Invoice",
+      accent,
+      titleColor: accent,
+      subject: `${isReceiptMode ? "Official Receipt" : "Invoice"} ${invoice.invoice_no} for ${invoice.client_name}`,
+      keywords: [invoice.invoice_no, invoice.client_name, invoice.status, COMPANY_PROFILE.currencyCode],
+      machineReadableText,
+      watermark: isReceiptMode ? "PAID" : undefined,
+      meta: [
+        { label: isReceiptMode ? "Receipt No:" : "Invoice No:", value: invoice.invoice_no },
+        { label: "Date:", value: formatDateOnly(issueDateOnly) },
+        { label: "Currency:", value: COMPANY_PROFILE.currencyCode },
+        ...(dueDateOnly && !isReceiptMode
+          ? [{ label: "Due Date:", value: formatDateOnly(dueDateOnly), color: PDF_COLORS.danger }]
+          : []),
+        { label: "Status:", value: (invoice.status || "").toUpperCase() },
+      ],
+      party: {
+        heading: isReceiptMode ? "Received From" : "Billed To",
+        name: invoice.client_name,
+        lines: [
+          ...(invoice.client_pic ? [{ text: `Attn: ${invoice.client_pic}`, strong: true, color: PDF_COLORS.black, size: 8.4 }] : []),
+          ...(invoice.client_address ? [{ text: invoice.client_address }] : []),
+          ...(clientIdentifiers.length > 0 ? [{ text: clientIdentifiers.join("  |  "), strong: true, size: 7 }] : []),
+          ...(invoice.client_email ? [{ text: invoice.client_email }] : []),
+          ...(invoice.client_phone ? [{ text: invoice.client_phone }] : []),
+        ],
+      },
+      columns: [
+        { header: "Description", width: 59, align: "left" },
+        { header: "Qty", width: 8, align: "center" },
+        { header: "Unit Price", width: 13, align: "right" },
+        { header: "Tax", width: 7, align: "center" },
+        { header: `Total (${COMPANY_PROFILE.currencyCode})`, width: 13, align: "right" },
+      ],
+      rows,
+      totals,
+      grandTotal: {
+        label: isReceiptMode ? "Total Paid" : "Total Due",
+        value: formatCurrency(invoice.amount),
+        color: accent,
+        tint: isReceiptMode ? PDF_COLORS.successTint : undefined,
+      },
+      panels: [
+        {
+          kind: "box",
+          heading: isReceiptMode ? "Payment Information" : "Payment Method",
+          ...(isReceiptMode
+            ? { text: "Payment received with thanks. This serves as the official receipt for the transaction." }
+            : {
+              rows: [
+                { label: "Payee Name", value: COMPANY_PROFILE.legalName },
+                { label: "Bank Name", value: COMPANY_PROFILE.bankName },
+                { label: "Bank Account", value: COMPANY_PROFILE.bankAccountNo },
+                { label: "Swift Code", value: COMPANY_PROFILE.swiftCode },
+              ],
+            }),
+        },
+        notesBlocks.length > 0 ? { kind: "notes", blocks: notesBlocks } : null,
+      ],
+      closingNote: isReceiptMode
+        ? { title: "Thank you for your business!", subtitle: "This is a computer-generated receipt. No signature is required." }
+        : undefined,
+    };
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32 transition-colors duration-300">
@@ -164,6 +273,16 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
           )}
 
           <Link
+            href={`/new-invoice?duplicate=${invoice.id}`}
+            className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 dark:bg-[#111111] dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-900"
+            title="Duplicate invoice"
+            aria-label="Duplicate invoice"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M8 8h10a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2v-8a2 2 0 012-2z" /></svg>
+            Duplicate
+          </Link>
+
+          <Link
             href={`/invoices/${invoice.id}/edit`}
             className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 dark:bg-[#111111] dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-900"
             title="Edit invoice"
@@ -173,12 +292,7 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
             Edit
           </Link>
 
-          <PrintButton
-            documentName={documentTitle}
-            targetId="invoice-document"
-            filename={pdfFilename}
-            machineReadableText={machineReadableText}
-          />
+          <PrintButton documentName={documentTitle} buildDocument={buildPdfDocument} />
         </div>
       </div>
 
@@ -243,17 +357,17 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
 
               {/* MAKLUMAT CLIENT */}
               <div className="mb-9 avoid-break">
-                <h3 className="text-[10px] font-black text-[#6B7280] uppercase tracking-widest mb-2 border-l-2 border-black pl-3">
+                <h3 className="text-[10px] font-black text-[#6B7280] uppercase tracking-widest mb-[3.3mm] border-l-2 border-black pl-3">
                   {isReceiptMode ? "Received From" : "Billed To"}
                 </h3>
                 <p className="text-[16px] font-bold text-[#000000] leading-snug pl-3">{invoice.client_name}</p>
-                <div className="mt-2 space-y-1 pl-3">
+                <div className="mt-[7mm] space-y-[1.4mm] pl-3">
                   {invoice.client_pic && <p className="text-[12px] text-[#000000] font-bold">Attn: {invoice.client_pic}</p>}
                   {invoice.client_address && <div className="text-[11px] text-[#374151] leading-relaxed max-w-[78%]">{formatAddress(invoice.client_address)}</div>}
                   {clientIdentifiers.length > 0 && (
-                    <p className="text-[10px] text-[#374151] pt-1 font-bold">{clientIdentifiers.join(" | ")}</p>
+                    <p className="text-[10px] text-[#374151] font-bold">{clientIdentifiers.join(" | ")}</p>
                   )}
-                  {invoice.client_email && <p className="text-[11px] text-[#374151] pt-1">{invoice.client_email}</p>}
+                  {invoice.client_email && <p className="text-[11px] text-[#374151]">{invoice.client_email}</p>}
                   {invoice.client_phone && <p className="text-[11px] text-[#374151]">{invoice.client_phone}</p>}
                 </div>
               </div>
@@ -263,11 +377,11 @@ export default function InvoiceViewer({ params }: { params: Promise<{ id: string
                 <table className="w-full mb-8 border-collapse">
                   <thead>
                     <tr className="border-y-2 border-[#000000] avoid-break">
-                      <th className="py-3 px-2 text-left text-[10px] font-black uppercase tracking-widest text-[#000000] w-[55%]">Description</th>
+                      <th className="py-3 px-2 text-left text-[10px] font-black uppercase tracking-widest text-[#000000] w-[62%]">Description</th>
                       <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[5%]">Qty</th>
-                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[15%]">Unit Price</th>
-                      <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[10%]">Tax</th>
-                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[15%]">Total (RM)</th>
+                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[13%]">Unit Price</th>
+                      <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[7%]">Tax</th>
+                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[13%]">Total (RM)</th>
                     </tr>
                   </thead>
                   <tbody>

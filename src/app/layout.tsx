@@ -6,6 +6,7 @@ import AuthProvider from "./components/AuthProvider";
 import Sidebar from "./components/Sidebar";
 import QuickAddMenu from "./components/QuickAddMenu";
 import MobileNav from "./components/MobileNav";
+import EnvBadge from "./components/EnvBadge";
 
 const jakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"],
@@ -91,6 +92,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <MobileNav />
 
         </AuthProvider>
+
+        <EnvBadge />
       </body>
     </html>
   );

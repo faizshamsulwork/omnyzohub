@@ -2,189 +2,35 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { companyFooterText } from "../lib/company";
+import { findUnsupportedCharacters, renderDocumentPdf, type PdfDocumentModel } from "../lib/pdf";
 import { getErrorMessage } from "../lib/utils";
-
-type PdfDocument = {
-  setFontSize: (size: number) => void;
-  setTextColor: (r: number, g: number, b: number) => void;
-  splitTextToSize: (text: string, maxWidth: number) => string[];
-  text: (text: string | string[], x: number, y: number, options?: { align?: "center" | "left" | "right" | "justify" }) => void;
-};
 
 interface PrintProps {
   documentName?: string;
-  targetId?: string;
-  filename?: string;
-  machineReadableText?: string;
+  /** Returns the document model to draw. Kept lazy so nothing is built until export. */
+  buildDocument: () => PdfDocumentModel;
 }
 
-export default function PrintButton({ 
-  documentName = "Document", 
-  targetId = "invoice-document", 
-  filename = "Document.pdf",
-  machineReadableText = "",
-}: PrintProps) {
-  
+export default function PrintButton({ documentName = "Document", buildDocument }: PrintProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleDownload = async () => {
-    setIsOpen(false); 
+    setIsOpen(false);
     setIsGenerating(true);
-    const toastId = toast.loading("Running Smart Slicer Engine...");
-    
+    const toastId = toast.loading("Generating PDF...");
+
     try {
-      const element = document.getElementById(targetId);
+      const model = buildDocument();
+      const unsupported = findUnsupportedCharacters(model);
 
-      if (!element) {
-        toast.error("Error: Document element not found.", { id: toastId });
-        setIsGenerating(false);
-        return;
+      await renderDocumentPdf(model);
+
+      if (unsupported.length > 0) {
+        toast.warning(`PDF saved, but these characters cannot be printed: ${unsupported.join(" ")}`, { id: toastId });
+      } else {
+        toast.success("PDF downloaded successfully!", { id: toastId });
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const html2canvas = (await import('html2canvas-pro')).default;
-      const { jsPDF } = await import('jspdf');
-
-      const canvas = await html2canvas(element, {
-        scale: 2, 
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        // 🔴 THE FIX: Tukar 'filter' kepada 'ignoreElements' supaya TypeScript dan Vercel gembira
-        ignoreElements: (node) => node.tagName === 'SCRIPT' || node.tagName === 'STYLE'
-      });
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pageHeightMM = pdf.internal.pageSize.getHeight();
-      
-      const marginY = 15; // 15mm Safe Margin Atas & Bawah
-      const printHeightMM = pageHeightMM - (marginY * 2);
-
-      const imgProps = pdf.getImageProperties(dataUrl);
-      const imgWidthInMM = pdfWidth;
-      const imgHeightInMM = (imgProps.height * imgWidthInMM) / imgProps.width;
-
-      const cssPxToMM = (2 * imgHeightInMM) / canvas.height;
-      const containerRect = element.getBoundingClientRect();
-      const mmToCanvasPx = canvas.height / imgHeightInMM;
-      const canvasContext = canvas.getContext("2d");
-
-      const sliceHasVisibleContent = (startMM: number, endMM: number) => {
-        if (!canvasContext) return true;
-
-        const startY = Math.max(0, Math.floor(startMM * mmToCanvasPx));
-        const endY = Math.min(canvas.height, Math.ceil(endMM * mmToCanvasPx));
-        const sliceHeight = endY - startY;
-
-        if (sliceHeight <= 0) return false;
-
-        const imageData = canvasContext.getImageData(0, startY, canvas.width, sliceHeight).data;
-        let visiblePixels = 0;
-
-        for (let i = 0; i < imageData.length; i += 16) {
-          const r = imageData[i];
-          const g = imageData[i + 1];
-          const b = imageData[i + 2];
-          const a = imageData[i + 3];
-
-          if (a > 24 && (r < 248 || g < 248 || b < 248)) {
-            visiblePixels += 1;
-            if (visiblePixels > 80) return true;
-          }
-        }
-
-        return false;
-      };
-      
-      const avoidElements = document.querySelectorAll('.avoid-break');
-      const breaks = Array.from(avoidElements).map(el => {
-         const rect = el.getBoundingClientRect();
-         return {
-             topMM: (rect.top - containerRect.top) * cssPxToMM,
-             bottomMM: (rect.bottom - containerRect.top) * cssPxToMM
-         };
-      });
-
-      // FUNGSI FOOTER KORPORAT
-      const drawFooter = (doc: PdfDocument, w: number, h: number) => {
-        doc.setFontSize(7.5); 
-        doc.setTextColor(128, 128, 128); 
-        const footerText = companyFooterText();
-        
-        const lines = doc.splitTextToSize(footerText, w - 30);
-        const lineHeight = 3.5;
-        const startY = h - 10 - ((lines.length - 1) * lineHeight);
-
-        doc.text(lines, w / 2, startY, { align: "center" });
-      };
-
-      const drawMachineReadableText = (doc: PdfDocument, w: number) => {
-        if (!machineReadableText.trim()) return;
-
-        doc.setFontSize(1);
-        doc.setTextColor(255, 255, 255);
-        const lines = doc.splitTextToSize(machineReadableText, w - 12);
-        doc.text(lines, 6, 6);
-      };
-
-      let currentYMM = 0;
-
-      while (currentYMM < imgHeightInMM) {
-        let pageBottomMM = currentYMM + printHeightMM;
-
-        for (const b of breaks) {
-            if (b.topMM < pageBottomMM && b.bottomMM > pageBottomMM) {
-                pageBottomMM = b.topMM - 2; 
-                break;
-            }
-        }
-
-        if (pageBottomMM <= currentYMM) {
-            pageBottomMM = currentYMM + printHeightMM;
-        }
-
-        const sliceHeightMM = pageBottomMM - currentYMM;
-
-        if (!sliceHasVisibleContent(currentYMM, pageBottomMM)) break;
-
-        if (currentYMM > 0) pdf.addPage();
-
-        pdf.addImage(dataUrl, 'JPEG', 0, marginY - currentYMM, imgWidthInMM, imgHeightInMM);
-
-        // Penutup putih margin
-        pdf.setFillColor(255, 255, 255);
-        pdf.rect(0, 0, pdfWidth, marginY, 'F'); 
-        pdf.rect(0, pageHeightMM - marginY, pdfWidth, marginY, 'F'); 
-
-        const whiteOutStart = marginY + sliceHeightMM;
-        const whiteOutHeight = pageHeightMM - whiteOutStart;
-        if (whiteOutHeight > 0) {
-          pdf.rect(0, whiteOutStart, pdfWidth, whiteOutHeight, 'F');
-        }
-
-        // COP FOOTER YANG KEMAS DI SINI
-        drawFooter(pdf, pdfWidth, pageHeightMM);
-        if (currentYMM === 0) drawMachineReadableText(pdf, pdfWidth);
-
-        currentYMM = pageBottomMM;
-
-        if (imgHeightInMM - currentYMM < 5) break; 
-      }
-
-      pdf.save(filename);
-      toast.success("PDF Downloaded successfully!", { id: toastId });
-
     } catch (error: unknown) {
       console.error("PDF Engine Error:", error);
       toast.error(`Failed to generate PDF: ${getErrorMessage(error)}`, { id: toastId });
@@ -195,8 +41,8 @@ export default function PrintButton({
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(true)} 
+      <button
+        onClick={() => setIsOpen(true)}
         disabled={isGenerating}
         className="px-5 py-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full text-sm font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-2 active:scale-95 print:hidden disabled:opacity-50"
       >
@@ -207,7 +53,7 @@ export default function PrintButton({
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-4 sm:p-0 print:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setIsOpen(false)}></div>
-          
+
           <div className="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl w-full max-w-sm rounded-[32px] p-6 relative z-10 shadow-2xl dark:shadow-black/50 animate-in slide-in-from-bottom-10 md:zoom-in-95 duration-300">
             <div className="text-center mb-8 mt-2">
               <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 md:hidden"></div>
@@ -218,12 +64,16 @@ export default function PrintButton({
             <div className="space-y-3">
               <button onClick={handleDownload} className="w-full py-4 px-4 bg-blue-600 text-white rounded-2xl text-base font-bold shadow-md shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                Generate Smart PDF
+                Download PDF
               </button>
               <button onClick={() => setIsOpen(false)} className="w-full py-4 px-4 bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white rounded-2xl text-base font-bold hover:bg-gray-200 dark:hover:bg-white/20 active:scale-95 transition-all">
                 Cancel
               </button>
             </div>
+
+            <p className="mt-5 text-center text-[10px] text-gray-400 dark:text-gray-500">
+              Vector PDF &middot; selectable text &middot; A4
+            </p>
           </div>
         </div>
       )}

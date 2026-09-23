@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getDateOnlyFromStorage, isValidDateOnly } from "../../../lib/utils";
+import { assertSupabaseUrlMatchesEnv } from "../../../lib/env";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -17,6 +18,8 @@ const getServerSupabase = (accessToken: string) => {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error("Missing Supabase environment variables.");
   }
+
+  assertSupabaseUrlMatchesEnv(supabaseUrl);
 
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -390,6 +393,12 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
   const { id } = await context.params;
+  const idError = validateInvoiceId(id);
+
+  if (idError) {
+    return NextResponse.json({ error: idError }, { status: 400 });
+  }
+
   const deletePasscode = process.env.INVOICE_DELETE_PASSWORD;
 
   if (!deletePasscode) {

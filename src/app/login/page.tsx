@@ -26,8 +26,9 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       toast.success("Welcome to Omnyzo Hub", { id: toastId });
+      // No router.refresh() here: it cancels the in-flight replace() and leaves
+      // the user staring at a blank /login screen.
       router.replace("/");
-      router.refresh();
     }
   };
 

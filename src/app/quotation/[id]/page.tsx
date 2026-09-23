@@ -7,7 +7,9 @@ import { supabase } from "../../lib/supabase";
 import Link from "next/link";
 import PrintButton from "../../components/PrintButton";
 import { COMPANY_PROFILE } from "../../lib/company";
+import { PDF_COLORS, type PdfDocumentModel } from "../../lib/pdf";
 import type { Contact, LineItem, Quotation } from "../../lib/types";
+import { formatCurrency, formatDateOnly, toMoney } from "../../lib/utils";
 
 export default function QuotationViewer({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -87,6 +89,82 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
     client?.sst_no ? `SST No: ${client.sst_no}` : null,
   ].filter(Boolean);
 
+  const buildPdfDocument = (): PdfDocumentModel => {
+    // pdf.ts turns a multi-line description into a bold heading + bullets on
+    // its own, so the raw text (with its **bold**/*italic*/"- " markers) is
+    // passed straight through.
+    const rows = (quote.items || []).map((item: LineItem) => (
+      item.type === "title"
+        ? { type: "title" as const, description: item.description }
+        : {
+          type: "item" as const,
+          description: item.description,
+          values: [
+            String(item.qty),
+            toMoney(item.price),
+            item.taxRate ? `${item.taxRate}%` : "-",
+            toMoney(item.total),
+          ],
+        }
+    ));
+
+    const notesBlocks = [
+      ...(quote.notes ? [{ heading: "Special Notes", body: quote.notes }] : []),
+      ...(quote.terms ? [{ heading: "Terms & Conditions", body: quote.terms }] : []),
+    ];
+
+    return {
+      filename: `${quote.quote_no}_Omnyzo.pdf`,
+      title: "Quotation",
+      subject: `Quotation ${quote.quote_no} for ${quote.client_name}`,
+      keywords: [quote.quote_no, quote.client_name, quote.status, COMPANY_PROFILE.currencyCode],
+      meta: [
+        { label: "Quote No:", value: quote.quote_no },
+        { label: "Date:", value: formatDateOnly(quote.date) },
+        { label: "Valid Until:", value: formatDateOnly(quote.valid_until), color: PDF_COLORS.danger },
+        { label: "Status:", value: (quote.status || "").toUpperCase() },
+      ],
+      party: {
+        heading: "Prepared For",
+        name: quote.client_name,
+        lines: [
+          ...(quote.client_pic ? [{ text: `Attn: ${quote.client_pic}`, strong: true, color: PDF_COLORS.black, size: 8.4 }] : []),
+          ...(quote.client_address ? [{ text: quote.client_address }] : []),
+          ...(clientIdentifiers.length > 0 ? [{ text: clientIdentifiers.join("  |  "), strong: true, size: 7 }] : []),
+          ...(quote.client_email ? [{ text: quote.client_email }] : []),
+          ...(quote.client_phone ? [{ text: quote.client_phone }] : []),
+        ],
+      },
+      columns: [
+        { header: "Description", width: 59, align: "left" },
+        { header: "Qty", width: 8, align: "center" },
+        { header: "Unit Price", width: 13, align: "right" },
+        { header: "Tax", width: 7, align: "center" },
+        { header: `Total (${COMPANY_PROFILE.currencyCode})`, width: 13, align: "right" },
+      ],
+      rows,
+      totals: [
+        { label: "Subtotal", value: toMoney(quote.subtotal) },
+        ...(Number(quote.discount) > 0
+          ? [{ label: "Discount", value: `- ${toMoney(quote.discount)}`, color: PDF_COLORS.danger }]
+          : []),
+        ...(Number(quote.tax_amount) > 0
+          ? [{ label: "Tax", value: toMoney(quote.tax_amount) }]
+          : []),
+      ],
+      grandTotal: { label: "Grand Total", value: formatCurrency(quote.total) },
+      panels: [
+        notesBlocks.length > 0 ? { kind: "notes", blocks: notesBlocks } : null,
+        {
+          kind: "acceptance",
+          heading: "Client Acceptance",
+          intro: "I/We agree to the terms, conditions, and pricing stated in this quotation and authorize commencement of the project.",
+          fields: ["Signature", "Name", "Date"],
+        },
+      ],
+    };
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0A0A0A] py-8 px-2 md:px-8 pb-32">
       
@@ -95,7 +173,7 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           Back
         </Link>
-        <PrintButton documentName={`Quotation ${quote.quote_no}`} targetId="quotation-document" filename={`${quote.quote_no}_Omnyzo.pdf`} />
+        <PrintButton documentName={`Quotation ${quote.quote_no}`} buildDocument={buildPdfDocument} />
       </div>
 
       <div className="overflow-x-auto w-full pb-8 scrollbar-hide flex justify-center">
@@ -131,15 +209,15 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
 
               {/* MAKLUMAT CLIENT */}
               <div className="mb-10 pt-2 avoid-break">
-                <h3 className="text-[10px] font-black text-[#6B7280] uppercase tracking-widest mb-2 border-l-2 border-black pl-3">Prepared For</h3>
+                <h3 className="text-[10px] font-black text-[#6B7280] uppercase tracking-widest mb-[3.3mm] border-l-2 border-black pl-3">Prepared For</h3>
                 <p className="text-[16px] font-bold text-[#000000] leading-snug pl-3">{quote.client_name}</p>
-                <div className="mt-2 space-y-1 pl-3">
+                <div className="mt-[7mm] space-y-[1.4mm] pl-3">
                   {quote.client_pic && <p className="text-[12px] text-[#000000] font-bold">Attn: {quote.client_pic}</p>}
                   {quote.client_address && <div className="text-[11px] text-[#374151] leading-relaxed max-w-[70%]">{formatAddress(quote.client_address)}</div>}
                   {clientIdentifiers.length > 0 && (
-                    <p className="text-[10px] text-[#374151] pt-1 font-bold">{clientIdentifiers.join(" | ")}</p>
+                    <p className="text-[10px] text-[#374151] font-bold">{clientIdentifiers.join(" | ")}</p>
                   )}
-                  {quote.client_email && <p className="text-[11px] text-[#374151] pt-1">{quote.client_email}</p>}
+                  {quote.client_email && <p className="text-[11px] text-[#374151]">{quote.client_email}</p>}
                   {quote.client_phone && <p className="text-[11px] text-[#374151]">{quote.client_phone}</p>}
                 </div>
               </div>
@@ -149,11 +227,11 @@ export default function QuotationViewer({ params }: { params: Promise<{ id: stri
                 <table className="w-full mb-8 border-collapse">
                   <thead>
                     <tr className="border-y-2 border-[#000000] avoid-break">
-                      <th className="py-3 px-2 text-left text-[10px] font-black uppercase tracking-widest text-[#000000] w-[55%]">Description</th>
+                      <th className="py-3 px-2 text-left text-[10px] font-black uppercase tracking-widest text-[#000000] w-[62%]">Description</th>
                       <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[5%]">Qty</th>
-                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[15%]">Unit Price</th>
-                      <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[10%]">Tax</th>
-                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[15%]">Total (RM)</th>
+                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[13%]">Unit Price</th>
+                      <th className="py-3 px-2 text-center text-[10px] font-black uppercase tracking-widest text-[#000000] w-[7%]">Tax</th>
+                      <th className="py-3 px-2 text-right text-[10px] font-black uppercase tracking-widest text-[#000000] w-[13%]">Total (RM)</th>
                     </tr>
                   </thead>
                   <tbody>

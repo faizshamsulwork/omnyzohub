@@ -75,6 +75,46 @@ export interface Asset {
   amount: MoneyValue;
   notes?: string | null;
   receipt_url?: string | null;
+  // Capital allowance / tax fields -- all nullable, all backward-compatible
+  // with rows created before this module existed. See src/app/lib/tax/.
+  supplier_name?: string | null;
+  placed_in_use_date?: string | null;
+  business_use_percentage?: number | null;
+  source_type?: "purchased_by_business" | "owner_contribution" | "personal_to_business_transfer" | "other" | null;
+  tax_rule_code?: string | null;
+  tax_rule_confirmed?: boolean | null;
+  tax_basis_status?: "needs_review" | "confirmed" | null;
+}
+
+export type DocumentType =
+  | "service_agreement"
+  | "sow"
+  | "subcontractor_disclosure"
+  | "creator_brief"
+  | "creator_agreement"
+  | "performance_report"
+  | "nda";
+
+export interface AgencyDocument {
+  id: string;
+  document_type: DocumentType;
+  doc_no: string;
+  title?: string | null;
+  status: string;
+  counterparty_contact_id?: string | null;
+  counterparty_name: string;
+  counterparty_pic?: string | null;
+  counterparty_email?: string | null;
+  counterparty_phone?: string | null;
+  counterparty_address?: string | null;
+  issue_date: string;
+  valid_until?: string | null;
+  payload: Record<string, unknown>;
+  line_items?: LineItem[] | null;
+  notes?: string | null;
+  terms?: string | null;
+  created_at?: string | null;
+  created_by?: string | null;
 }
 
 export interface Quotation {
